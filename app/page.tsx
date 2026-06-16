@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { PreptWordmark } from '@/components/PreptLogo';
 import { BlueprintGrid } from '@/components/BlueprintGrid';
-import { PreptHeroLogo } from '@/components/PreptHeroLogo';
 import { TetrisAnimation } from '@/components/TetrisAnimation';
 import { ArrowRight } from 'lucide-react';
 
@@ -57,40 +56,32 @@ export default function LandingPage() {
         </div>
       </nav>
 
-      {/* Blueprint Hero Section */}
-      <section className="pt-40 md:pt-56 pb-20 max-w-[1440px] mx-auto px-6 lg:px-12 flex flex-col justify-end min-h-[85vh]">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-8 items-center w-full">
-          <div className="max-w-3xl flex flex-col items-start">
-            <div className="inline-flex items-center gap-3 border border-border px-4 py-2 mb-12 bg-surface text-sm font-medium">
-              <span className="w-2 h-2 bg-accent rounded-none" />
-              V2 Architecture Live
-            </div>
+      {/* Centered Brutalist Hero Section */}
+      <section className="pt-40 md:pt-56 pb-32 max-w-[1440px] mx-auto px-6 lg:px-12 flex flex-col items-center text-center min-h-[85vh] justify-center">
+        <div className="inline-flex items-center gap-3 border border-border px-4 py-2 mb-12 bg-surface text-sm font-medium">
+          <span className="w-2 h-2 bg-accent rounded-none" />
+          V2 Architecture Live
+        </div>
 
-            <h1 className="text-6xl md:text-8xl lg:text-[96px] font-medium tracking-tight leading-[0.95] mb-12">
-              AI Interview Simulation.
-            </h1>
+        <h1 className="text-6xl md:text-8xl lg:text-[100px] font-medium tracking-tight leading-[0.95] mb-8 max-w-5xl mx-auto uppercase">
+          AI Interview<br />Simulation.
+        </h1>
 
-            <p className="text-xl md:text-2xl text-fg-muted max-w-2xl mb-16 font-normal leading-relaxed">
-              Train for your next career move in a high-fidelity, adaptive environment. Real-time feedback, live code execution, and deep performance analytics built for top engineers.
-            </p>
+        <p className="text-xl md:text-2xl text-fg-muted max-w-3xl mx-auto mb-16 font-mono leading-relaxed">
+          Train for your next career move in a high-fidelity, adaptive environment. Real-time feedback, live code execution, and deep performance analytics built for top engineers.
+        </p>
 
-            <div className="flex flex-col sm:flex-row gap-4">
-              <button
-                onClick={() => signIn('google', { callbackUrl: '/dashboard' })}
-                className="prept-btn-gradient"
-              >
-                Start Practicing Free
-                <ArrowRight size={18} className="ml-2" />
-              </button>
-              <button className="prept-btn-secondary">
-                View Documentation
-              </button>
-            </div>
-          </div>
-          
-          <div className="hidden lg:flex justify-end w-full pb-12 pr-12">
-            <PreptHeroLogo />
-          </div>
+        <div className="flex flex-col sm:flex-row gap-6 justify-center">
+          <button
+            onClick={() => signIn('google', { callbackUrl: '/dashboard' })}
+            className="prept-btn-gradient px-8 py-4 text-lg"
+          >
+            Start Practicing Free
+            <ArrowRight size={20} className="ml-2" />
+          </button>
+          <button className="prept-btn-secondary px-8 py-4 text-lg">
+            View Documentation
+          </button>
         </div>
       </section>
 

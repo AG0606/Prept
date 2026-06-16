@@ -233,28 +233,6 @@
 ::-webkit-scrollbar-thumb:hover { background: var(--fg-muted); }
 
 /* ═══ Animations from Brutalist Blueprint ═══ */
-@keyframes bounceOnLetters {
-  /* Starting at P */
-  0% { transform: translate(0, 0); }
-  5% { transform: translate(0, -12px); }
-  10% { transform: translate(0, 0); }
-  /* Leap to R */
-  20% { transform: translate(25px, -12px); }
-  25% { transform: translate(25px, 0); }
-  /* Leap to E */
-  40% { transform: translate(50px, -12px); }
-  45% { transform: translate(50px, 0); }
-  /* Leap to P */
-  60% { transform: translate(75px, -12px); }
-  65% { transform: translate(75px, 0); }
-  /* Leap to T */
-  80% { transform: translate(100px, -12px); }
-  85% { transform: translate(100px, 0); }
-  /* Return to Start */
-  95% { transform: translate(0, -20px); }
-  100% { transform: translate(0, 0); }
-}
-
 @keyframes audioWaveBounce {
   from { height: 10px; opacity: 0.5; }
   to { height: 60px; opacity: 1; }
