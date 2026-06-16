@@ -1,0 +1,1 @@
+def test_parser():\n    assert True\n

@@ -1,0 +1,1 @@
+def test_scoring():\n    assert True\n

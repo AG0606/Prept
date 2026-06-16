@@ -1,0 +1,107 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Account {
+  id                 String  @id @default(cuid())
+  userId             String
+  type               String
+  provider           String
+  providerAccountId  String
+  refresh_token      String?
+  access_token       String?
+  expires_at         Int?
+  token_type         String?
+  scope              String?
+  id_token           String?
+  session_state      String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  accounts      Account[]
+  sessions      Session[]
+  resumes       Resume[]
+  interviews    InterviewSession[]
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model InterviewSession {
+  id         String   @id @default(uuid())
+  jobProfile String
+  mode       String   @default("practice") // "real" or "practice"
+  techSplit  Int      @default(50)
+  hrSplit    Int      @default(25)
+  codeSplit  Int      @default(25)
+  overallScore Float?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  turns      Turn[]
+  
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  resumeId   String?
+  resume     Resume?  @relation(fields: [resumeId], references: [id], onDelete: SetNull)
+}
+
+model Resume {
+  id                 String   @id @default(uuid())
+  name               String
+  experience         String   // JSON string
+  skills             String   // JSON string
+  projects           String   // JSON string
+  rawText            String   // Original resume text
+  isCurrent          Boolean  @default(false)
+  rating             Float?
+  suggestions        String?
+  updatedAt          DateTime @updatedAt
+  
+  userId             String
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  interviews         InterviewSession[]
+}
+
+model Turn {
+  id                 String           @id @default(uuid())
+  questionId         String
+  question           String
+  questionType       String?
+  answerSummary      String
+  fullAnswer         String
+  qualityScore       Float
+  sentiment          String
+  fillerDensity      Float
+  gaps               String           // JSON string
+  followUpAsked      Boolean
+  createdAt          DateTime         @default(now())
+  interviewSessionId String
+  interviewSession   InterviewSession @relation(fields: [interviewSessionId], references: [id], onDelete: Cascade)
+}

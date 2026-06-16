@@ -1,0 +1,280 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* ═══ Surface Palette (Brutalist Blueprint) ═══ */
+    --bg: #FBFBF8;
+    --surface: #FBFBF8;
+    --surface-warm: #F4F4F0;
+    --surface-raised: #FFFFFF;
+    --fg: #000000;
+    --fg-muted: rgba(0, 0, 0, 0.6);
+    --fg-subtle: rgba(0, 0, 0, 0.4);
+    
+    /* Strict 1px Grid Borders */
+    --border: rgba(7, 7, 11, 0.15);
+    --border-soft: rgba(7, 7, 11, 0.08);
+
+    /* ═══ Brand Accent (Maintained as requested) ═══ */
+    --accent: #5B5BFF;
+    --accent-on: #FFFFFF;
+    --accent-hover: #4B4BEF;
+    --accent-muted: rgba(91, 91, 255, 0.1);
+    --accent-glow: transparent; /* No glows */
+
+    /* ═══ Semantic ═══ */
+    --success: #000000;
+    --success-muted: rgba(0,0,0,0.05);
+    --warn: #000000;
+    --warn-muted: rgba(0,0,0,0.05);
+    --danger: #000000;
+    --danger-muted: rgba(0,0,0,0.05);
+
+    /* ═══ Radii (Strict Brutalist) ═══ */
+    --radius-sm: 0px;
+    --radius-md: 0px;
+    --radius-lg: 0px;
+    --radius-xl: 0px;
+
+    /* ═══ Elevation (None) ═══ */
+    --elev-ring: none;
+    --elev-sm: none;
+    --elev-md: none;
+    --elev-raised: none;
+    --elev-float: none;
+
+    /* ═══ Gradients (None) ═══ */
+    --gradient-brand: var(--accent);
+    --gradient-hero: none;
+    --gradient-mesh: none;
+  }
+
+  /* Strip dark mode entirely - empty block */
+  .dark {
+  }
+
+  * {
+    border-color: var(--border);
+  }
+
+  html {
+    scroll-behavior: auto; /* Brutalist snap */
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-inter, 'Inter'), system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+@layer utilities {
+  .bg-blueprint {
+    background-image: 
+      linear-gradient(var(--fg) 1px, transparent 1px),
+      linear-gradient(90deg, var(--fg) 1px, transparent 1px);
+    background-size: 40px 40px;
+    opacity: 0.05;
+  }
+}
+
+@layer components {
+
+  /* ═══ Cards ═══ */
+  .prept-card {
+    background: var(--surface);
+    border-radius: 0px;
+    box-shadow: none;
+    border: 1px solid var(--border);
+  }
+
+  /* ═══ Panels ═══ */
+  .prept-panel {
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 0px;
+    box-shadow: none;
+  }
+
+  /* ═══ Glass (Disabled) ═══ */
+  .prept-glass {
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* ═══ Buttons ═══ */
+  .prept-btn-primary {
+    background: var(--fg);
+    color: var(--bg);
+    padding: 0.75rem 1.5rem;
+    border-radius: 0px;
+    font-weight: 500;
+    font-size: 0.875rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border: 1px solid var(--fg);
+    transition: background-color 0.2s, color 0.2s;
+  }
+  .prept-btn-primary:hover {
+    background: transparent;
+    color: var(--fg);
+  }
+
+  .prept-btn-gradient {
+    background: var(--accent);
+    color: var(--accent-on);
+    padding: 1rem 2rem;
+    border-radius: 0px;
+    font-weight: 500;
+    font-size: 1rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border: 1px solid var(--accent);
+    transition: background-color 0.2s, color 0.2s;
+  }
+  .prept-btn-gradient:hover {
+    background: transparent;
+    color: var(--accent);
+  }
+
+  .prept-btn-secondary {
+    background: transparent;
+    color: var(--fg);
+    border: 1px solid var(--border);
+    padding: 0.75rem 1.5rem;
+    border-radius: 0px;
+    font-weight: 500;
+    font-size: 0.875rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    transition: border-color 0.2s;
+  }
+  .prept-btn-secondary:hover {
+    border-color: var(--fg);
+  }
+
+  /* Keep backward compat */
+  .saas-btn-primary { @apply prept-btn-primary; }
+  .saas-btn-secondary { @apply prept-btn-secondary; }
+  .saas-card { @apply prept-card; }
+  .saas-panel { @apply prept-panel; }
+
+  /* ═══ Section Label ═══ */
+  .prept-label {
+    font-family: var(--font-inter, 'Inter'), sans-serif;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--fg);
+  }
+
+  /* ═══ Gradient Text (Disabled) ═══ */
+  .prept-gradient-text {
+    color: var(--accent);
+  }
+
+  /* ═══ Hero Mesh Background (Disabled) ═══ */
+  .prept-hero-mesh {
+    background: var(--bg);
+  }
+
+  /* ═══ Feature Bento Card (Brutalist) ═══ */
+  .prept-bento-card {
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 0px;
+    padding: 3rem;
+  }
+
+  /* ═══ Icon Badge ═══ */
+  .prept-icon-badge {
+    width: 3rem;
+    height: 3rem;
+    border-radius: 0px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--fg);
+  }
+
+  /* ═══ Input ═══ */
+  .prept-input {
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 0px;
+    padding: 0.75rem 1rem;
+    font-size: 0.875rem;
+    color: var(--fg);
+    width: 100%;
+  }
+  .prept-input:focus {
+    outline: none;
+    border-color: var(--fg);
+  }
+}
+
+/* ═══ Custom Scrollbar ═══ */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: var(--bg); border-left: 1px solid var(--border); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 0px; }
+::-webkit-scrollbar-thumb:hover { background: var(--fg-muted); }
+
+/* ═══ Animations from Brutalist Blueprint ═══ */
+@keyframes bounceOnLetters {
+  /* Starting at P */
+  0% { transform: translate(0, 0); }
+  5% { transform: translate(0, -12px); }
+  10% { transform: translate(0, 0); }
+  /* Leap to R */
+  20% { transform: translate(25px, -12px); }
+  25% { transform: translate(25px, 0); }
+  /* Leap to E */
+  40% { transform: translate(50px, -12px); }
+  45% { transform: translate(50px, 0); }
+  /* Leap to P */
+  60% { transform: translate(75px, -12px); }
+  65% { transform: translate(75px, 0); }
+  /* Leap to T */
+  80% { transform: translate(100px, -12px); }
+  85% { transform: translate(100px, 0); }
+  /* Return to Start */
+  95% { transform: translate(0, -20px); }
+  100% { transform: translate(0, 0); }
+}
+
+@keyframes audioWaveBounce {
+  from { height: 10px; opacity: 0.5; }
+  to { height: 60px; opacity: 1; }
+}
+
+/* Tetris fall animations with slight variations for organic feel */
+@keyframes tetrisFall1 {
+  0% { top: -60px; }
+  40% { top: 216px; }
+  100% { top: 216px; }
+}
+
+@keyframes tetrisFall2 {
+  0% { top: -80px; }
+  50% { top: 192px; }
+  100% { top: 192px; }
+}
+
+@keyframes tetrisFall3 {
+  0% { top: -40px; }
+  45% { top: 240px; }
+  100% { top: 240px; }
+}
