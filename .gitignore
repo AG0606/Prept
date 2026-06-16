@@ -36,6 +36,11 @@ yarn-error.log*
 # non-core files
 /non_core_assets/
 
+# database
+*.db
+*.sqlite
+prisma/dev.db
+
 # vercel
 .vercel
 
