@@ -62,7 +62,6 @@ export class GeminiAgent {
 
     if (counts.technical < targets.tech) allowed.push('technical');
     if (counts.behavioral < targets.hr) allowed.push('behavioral');
-    if (counts.coding < targets.code) allowed.push('coding');
 
     // If nothing is left (all targets met), allow end_session
     if (allowed.length === 0) return { allowed: [], forced: null };
@@ -73,30 +72,23 @@ export class GeminiAgent {
   /** Get the numerical targets for each question category */
   private getTargets(): { tech: number; hr: number; code: number; total: number } {
     if (this.config.mode === 'real') {
-      const isTechRole = !['Product Manager', 'Other'].includes(this.contextManager.getJobProfile());
-      if (isTechRole) {
-        return { tech: 6, hr: 3, code: 3, total: 12 };
-      } else {
-        return { tech: 8, hr: 4, code: 0, total: 12 };
-      }
+      return { tech: 8, hr: 4, code: 0, total: 12 };
     }
-    // Practice mode — derive from splits
+    // Practice mode — derive from 2-way splits
     const total = 12;
     const tech = Math.round(total * this.config.techSplit / 100);
-    const hr = Math.round(total * this.config.hrSplit / 100);
-    const code = Math.max(0, total - tech - hr); // remainder to avoid rounding drift
-    return { tech, hr, code, total };
+    const hr = Math.max(0, total - tech);
+    return { tech, hr, code: 0, total };
   }
 
   /**
-   * Normalize a questionType returned by Gemini into the 3 canonical categories.
-   * resume_specific / situational / unknown → mapped to "technical" or "behavioral".
+   * Normalize a questionType returned by Gemini into the 2 canonical categories.
+   * resume_specific / situational / coding / unknown → mapped to "technical" or "behavioral".
    */
   private normalizeQuestionType(raw: string | undefined): QuestionCategory {
     if (!raw) return 'behavioral';
     const lower = raw.toLowerCase().trim();
-    if (lower === 'coding') return 'coding';
-    if (lower === 'technical') return 'technical';
+    if (lower === 'technical' || lower === 'coding') return 'technical';
     if (lower === 'behavioral') return 'behavioral';
     // Map situational → behavioral, resume_specific → technical
     if (lower === 'situational') return 'behavioral';
@@ -120,7 +112,7 @@ export class GeminiAgent {
       const counts = this.contextManager.getQuestionTypeCounts();
       const targets = this.getTargets();
       const remaining = allowed.map(t => {
-        const key = t === 'technical' ? 'tech' : t === 'behavioral' ? 'hr' : 'code';
+        const key = t === 'technical' ? 'tech' : 'hr';
         const countKey = t;
         return { type: t, room: targets[key] - (counts[countKey] || 0) };
       });
@@ -131,7 +123,6 @@ export class GeminiAgent {
   }
 
   private getSystemPrompt(): string {
-    const isTechRole = !['Product Manager', 'Other'].includes(this.contextManager.getJobProfile());
     const typeCounts = this.contextManager.getQuestionTypeCounts();
     const totalAsked = this.contextManager.getUnskippedMainQuestionsCount();
     const targets = this.getTargets();
@@ -139,18 +130,12 @@ export class GeminiAgent {
     
     let mixInstruction = '';
     if (this.config.mode === 'real') {
-      if (isTechRole) {
-        mixInstruction = `- MUST ask exactly 12 questions total: 6 technical, 3 behavioral, and 3 coding.
-- Progress tracker: tech:${typeCounts.technical}/6 behavioral:${typeCounts.behavioral}/3 coding:${typeCounts.coding}/3 total:${totalAsked}/12
-- If total reaches 12, you MUST return end_session.`;
-      } else {
-        mixInstruction = `- MUST ask exactly 12 questions total: 8 skill-based and 4 behavioral/HR.
+      mixInstruction = `- MUST ask exactly 12 questions total: 8 technical/skills and 4 behavioral/HR.
 - Progress tracker: technical:${typeCounts.technical}/8 behavioral:${typeCounts.behavioral}/4 total:${totalAsked}/12
 - If total reaches 12, you MUST return end_session.`;
-      }
     } else {
-      mixInstruction = `- Target question mix: Technical ${targets.tech}, Behavioral ${targets.hr}, Coding ${targets.code} (total ${targets.total} unskipped questions).
-- Progress tracker: tech:${typeCounts.technical}/${targets.tech} behavioral:${typeCounts.behavioral}/${targets.hr} coding:${typeCounts.coding}/${targets.code} total:${totalAsked}/${targets.total}
+      mixInstruction = `- Target question mix: Technical ${targets.tech}, Behavioral ${targets.hr} (total ${targets.total} unskipped questions).
+- Progress tracker: tech:${typeCounts.technical}/${targets.tech} behavioral:${typeCounts.behavioral}/${targets.hr} total:${totalAsked}/${targets.total}
 - End the session after exactly ${targets.total} unskipped questions have been answered.`;
     }
 
@@ -158,18 +143,17 @@ export class GeminiAgent {
     const typeConstraints: string[] = [];
     if (targets.tech === 0) typeConstraints.push('- NEVER ask technical questions. The user set technical to 0%.');
     if (targets.hr === 0) typeConstraints.push('- NEVER ask behavioral/situational questions. The user set behavioral to 0%.');
-    if (targets.code === 0) typeConstraints.push('- NEVER ask coding questions. The user set coding to 0%.');
     if (forced) typeConstraints.push(`- You MUST ask a "${forced}" question next. All other quotas are met.`);
     if (allowed.length > 0 && !forced) typeConstraints.push(`- For the next question, choose from these types ONLY: ${allowed.join(', ')}.`);
     const constraintsBlock = typeConstraints.length > 0 ? '\n' + typeConstraints.join('\n') : '';
 
-    // Restrict the valid questionType values in the output format to only the 3 canonical types
-    const validTypes = 'behavioral|technical|coding';
+    // Restrict the valid questionType values in the output format to only technical and behavioral
+    const validTypes = 'behavioral|technical';
 
     // The =HISTORY= section in buildGeminiContext already tracks asked questions,
     // so we don't duplicate them here to save ~150-300 tokens per turn.
 
-    return `You are a senior ${this.contextManager.getJobProfile()} interviewer at a top tech company. You are conducting a structured interview.
+    return `You are a senior ${this.contextManager.getJobProfile()} interviewer at a top company. You are conducting a structured interview.
 
 YOUR PERSONA:
 - Professional but warm. You want the candidate to succeed.
@@ -192,35 +176,22 @@ ${this.consecutiveFollowUps >= this.MAX_CONSECUTIVE_FOLLOWUPS ? '- CRITICAL: You
 - If speaking too fast (>170 WPM), gently suggest slowing down.
 - If filler density is high (>5%), note it subtly.
 
-CODING QUESTIONS:
-- Coding questions must be solvable in JavaScript since the coding playground only executes JavaScript. The candidate will write JavaScript/TypeScript code. Therefore, ask coding questions that can be solved and evaluated in JavaScript.
-- For coding questions, you MUST include "testCases" — an array of {"input": "...", "expectedOutput": "...", "description": "..."}.
-- Make coding questions relevant to the job role and candidate's skill set.
-- Include 2-3 test cases: 1 basic, 1 edge case, 1 moderate.
-- Crucially, the "testCases" must have:
-  - "input": A JSON-serializable string representing the input argument(s). If the function takes multiple arguments, "input" must be a JSON array of those arguments (e.g. "[[1, 2, 3], 5]"). If it takes a single argument, it can be a JSON string, number, array, or object (e.g., "[1, 2, 3]" or "5" or "\"hello\"").
-  - "expectedOutput": A JSON-serializable string representing the expected return value of the function (e.g. "8" or "\"olleh\"" or "[2, 4, 6]").
-  - "description": A short explanation of the test case.
-- After the candidate writes code, ask 1-2 follow-up questions about time complexity, trade-offs, or alternative approaches. Mark these with isFollowUp: true.
-- If =CODE_WRITTEN= is present, evaluate the code and ask about it. If =TEST_RESULTS= shows failures, ask the candidate to fix or explain.
-
 FOLLOW-UPS:
 - A follow-up is when you want to dig deeper into the SAME topic.
 - Set isFollowUp: true and keep the same questionType.
-- Use follow-ups when: the answer was vague, the code had issues, or you want to explore a mentioned concept deeper.
+- Use follow-ups when: the answer was vague or you want to explore a mentioned concept deeper.
 
 OUTPUT FORMAT — You MUST respond with exactly ONE JSON object:
 
-{"type":"ask_question","question":"Your question here","question_id":"descriptive_slug","questionType":"${validTypes}","isFollowUp":false,"expectedPoints":["point1","point2"],"testCases":[{"input":"...","expectedOutput":"...","description":"..."}]}
+{"type":"ask_question","question":"Your question here","question_id":"descriptive_slug","questionType":"${validTypes}","isFollowUp":false,"expectedPoints":["point1","point2"]}
 
 CRITICAL RULES FOR questionType:
-- Use ONLY one of: "technical", "behavioral", "coding".
-- Do NOT use "resume_specific" or "situational" — those are NOT valid.
+- Use ONLY one of: "technical", "behavioral".
+- Do NOT use "coding", "resume_specific", or "situational" — those are NOT valid.
 - Resume-related technical questions should use questionType: "technical".
 - Situational/HR questions should use questionType: "behavioral".
 
 Notes:
-- testCases is REQUIRED for coding questions, omit for other types.
 - expectedPoints should list 2-4 key points you expect in a good answer.
 - question_id should be a short descriptive slug like "react_state_mgmt" or "system_design_cache".
 - isFollowUp should be true only for follow-up questions on the same topic.
