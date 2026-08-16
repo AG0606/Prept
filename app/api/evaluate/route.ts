@@ -35,6 +35,23 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    const turnSummaries = turns.map((t: any, i: number) => 
+      `Q${i+1} [${t.questionType}]: ${t.question}\nAnswer Summary: ${t.answerSummary}\nScore: ${t.scores?.quality || 0}/10`
+    ).join('\n\n');
+
+    const prompt = `You are evaluating an interview session for candidate ${candidateName || 'Candidate'} applying for a ${jobProfile || 'Professional'} role.
+Based on the following Q&A summaries, provide a final impression and 2-3 specific recommendations for improvement.
+
+Interview Data:
+${turnSummaries}
+
+Return ONLY valid JSON in this exact format:
+{
+  "impression": "2-3 sentences summarizing their overall performance, technical depth, and communication skills.",
+  "recommendations": ["Recommendation 1", "Recommendation 2", "Recommendation 3"]
+}
+`;
+
     let text = '';
 
     // Primary: Gemini Flash
