@@ -84,18 +84,31 @@ export default function DashboardPage() {
     router.push('/interview');
   };
 
-  const handleSliderChange = (type: 'tech' | 'hr', value: number) => {
+  const handleSliderChange = (type: 'tech' | 'hr' | 'code', value: number) => {
     let newTech = techSplit;
     let newHr = hrSplit;
+    let newCode = codeSplit;
     
     if (type === 'tech') {
       newTech = value;
-      newHr = 100 - newTech;
-    } else {
+      const rem = 100 - newTech;
+      const ratio = hrSplit + codeSplit > 0 ? hrSplit / (hrSplit + codeSplit) : 0.5;
+      newHr = Math.round(rem * ratio);
+      newCode = rem - newHr;
+    } else if (type === 'hr') {
       newHr = value;
-      newTech = 100 - newHr;
+      const rem = 100 - newHr;
+      const ratio = techSplit + codeSplit > 0 ? techSplit / (techSplit + codeSplit) : 0.5;
+      newTech = Math.round(rem * ratio);
+      newCode = rem - newTech;
+    } else {
+      newCode = value;
+      const rem = 100 - newCode;
+      const ratio = techSplit + hrSplit > 0 ? techSplit / (techSplit + hrSplit) : 0.5;
+      newTech = Math.round(rem * ratio);
+      newHr = rem - newTech;
     }
-    setSplits(newTech, newHr, 0);
+    setSplits(newTech, newHr, newCode);
   };
 
   const handleSetCurrentResume = async (id: string) => {
@@ -293,7 +306,7 @@ export default function DashboardPage() {
                             <span className="w-2 h-2 rounded-full bg-accent" />
                             Practice Sandbox
                           </h4>
-                          <p className="text-sm text-fg-muted leading-relaxed">Customizable mix of technical and behavioral/HR topics. Live emotion & speaking pace indicators displayed.</p>
+                          <p className="text-sm text-fg-muted leading-relaxed">Customizable mixes of tech/coding/HR topics. Live emotion & speaking pace indicators displayed.</p>
                         </button>
                       </div>
                     </div>
@@ -302,14 +315,18 @@ export default function DashboardPage() {
                     {mode === 'practice' && (
                       <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}>
                         <p className="text-sm font-bold text-fg mb-3">3. Question Mix</p>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-surface-warm rounded-none p-6">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-surface-warm rounded-xl p-6">
                           <div>
-                            <div className="flex justify-between text-xs font-mono mb-2"><span>Technical</span><span>{techSplit}%</span></div>
-                            <input type="range" min="0" max="100" value={techSplit} onChange={(e) => handleSliderChange('tech', Number(e.target.value))} className="w-full accent-[var(--accent)] bg-border h-1.5 rounded-none appearance-none cursor-pointer" />
+                            <div className="flex justify-between text-xs font-mono mb-2"><span>Tech</span><span>{techSplit}%</span></div>
+                            <input type="range" min="0" max="100" value={techSplit} onChange={(e) => handleSliderChange('tech', Number(e.target.value))} className="w-full accent-[var(--accent)] bg-border h-1.5 rounded-lg appearance-none cursor-pointer" />
                           </div>
                           <div>
                             <div className="flex justify-between text-xs font-mono mb-2"><span>Behavioral</span><span>{hrSplit}%</span></div>
-                            <input type="range" min="0" max="100" value={hrSplit} onChange={(e) => handleSliderChange('hr', Number(e.target.value))} className="w-full accent-[var(--accent)] bg-border h-1.5 rounded-none appearance-none cursor-pointer" />
+                            <input type="range" min="0" max="100" value={hrSplit} onChange={(e) => handleSliderChange('hr', Number(e.target.value))} className="w-full accent-[var(--accent)] bg-border h-1.5 rounded-lg appearance-none cursor-pointer" />
+                          </div>
+                          <div>
+                            <div className="flex justify-between text-xs font-mono mb-2"><span>Coding</span><span>{codeSplit}%</span></div>
+                            <input type="range" min="0" max="100" value={codeSplit} onChange={(e) => handleSliderChange('code', Number(e.target.value))} className="w-full accent-[var(--accent)] bg-border h-1.5 rounded-lg appearance-none cursor-pointer" />
                           </div>
                         </div>
                       </motion.div>

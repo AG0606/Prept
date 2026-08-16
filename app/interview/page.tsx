@@ -10,9 +10,10 @@ import { EmotionOverlay } from '@/components/EmotionOverlay';
 import { AudioAnalyzer } from '@/components/AudioAnalyzer';
 import { TranscriptDisplay } from '@/components/TranscriptDisplay';
 import { ScorePanel } from '@/components/ScorePanel';
+import { CodePlayground } from '@/components/CodePlayground';
 import { PreptWordmark } from '@/components/PreptLogo';
 import type { TurnSummary, LiveSignals } from '@/types';
-import { Check, Loader2, MessageSquare } from 'lucide-react';
+import { Check, Loader2, Code as CodeIcon, MessageSquare } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useEnhancedTTS } from '@/hooks/useEnhancedTTS';
 import { useAudioRecorder } from '@/hooks/useAudioRecorder';
@@ -52,8 +53,10 @@ export default function InterviewPage() {
     setFillerCount: useInterviewStore(s => s.setFillerCount),
   };
   const [isProcessing, setIsProcessing] = useState(false);
+  const [showCode, setShowCode] = useState(false);
   const [questionCount, setQuestionCount] = useState(0);
   const [agentThinking, setAgentThinking] = useState(false);
+  const [codingSubState, setCodingSubState] = useState<'coding' | 'followup' | null>(null);
   const [isEnding, setIsEnding] = useState(false);
   
   const { speak, stop, voiceSelectorUI } = useEnhancedTTS();
@@ -197,7 +200,18 @@ export default function InterviewPage() {
           setQuestionCount((c) => c + 1);
         }
 
-        store.setCurrentQuestion(question, qId, qType, undefined, isFollowUp);
+        store.setCurrentQuestion(question, qId, qType, action.testCases, isFollowUp);
+        
+        // Code playground logic
+        if (qType === 'coding') {
+          setShowCode(true);
+          setCodingSubState(isFollowUp ? 'followup' : 'coding');
+        } else if (!isFollowUp) {
+          // Hide code window if we move to a new non-coding question
+          setShowCode(false);
+          setCodingSubState(null);
+          store.setCurrentCode('');
+        }
 
         // Use Enhanced TTS
         speak(question, () => store.setIsSpeaking(true), () => store.setIsSpeaking(false));
@@ -253,6 +267,55 @@ export default function InterviewPage() {
     }
   }, [store, isProcessing, getNextQuestion, stop]);
 
+  const handleSubmitCode = useCallback(async () => {
+    if (isProcessing) return;
+    setIsProcessing(true);
+    isSubmittingRef.current = true;
+    stop(); // Stop any TTS
+
+    try {
+      // Evaluate the written code in the sandbox context
+      const codeInput = useInterviewStore.getState().currentCode;
+      const testResults = useInterviewStore.getState().codeTestResults;
+      
+      const turnSummary: TurnSummary = {
+        questionId: store.currentQuestionId,
+        question: store.currentQuestion,
+        questionType: 'coding',
+        answerSummary: `Code sandbox submission: [${codeInput ? 'Written Code' : 'Empty Solution'}]. Test cases passed: ${testResults?.passed || 0}/${testResults?.total || 0}`,
+        fullAnswer: codeInput,
+        scores: {
+          // Score calculation: percentage of tests passed scaled to 10
+          quality: testResults && testResults.total > 0 
+            ? Math.round((testResults.passed / testResults.total) * 10) 
+            : 0,
+          sentiment: 'neutral',
+          fillerDensity: 0, // Coding has no live STT verbal fillers
+          dominantEmotion: 'neutral',
+          wpm: 0,
+        },
+        gaps: [],
+        followUpAsked: false,
+      };
+
+      ctxManagerRef.current?.addTurn(turnSummary);
+      store.addTurn(turnSummary);
+
+      // Request follow-up explanation from the agent
+      await getNextQuestion(`Code Playground submitted. The candidate's code executed against sample test cases successfully: ${testResults?.passed || 0} passed out of ${testResults?.total || 0} total cases. Candidates code was:\n${codeInput}`, {
+        quality: turnSummary.scores.quality,
+        sentiment: 'neutral',
+        fillerDensity: 0,
+      });
+
+    } catch (err) {
+      console.error('Code submit error:', err);
+    } finally {
+      isSubmittingRef.current = false;
+      setIsProcessing(false);
+    }
+  }, [store, isProcessing, getNextQuestion, stop]);
+
   const handleSubmitAnswer = useCallback(async () => {
     if (isProcessing) return;
     setIsProcessing(true);
@@ -299,6 +362,8 @@ export default function InterviewPage() {
       // Local filler detection (no API call needed)
       const fillerResult = detectFillers(finalTranscript);
 
+      // ── UNIFIED API CALL: scoring + sentiment + next question in ONE request ──
+      // This replaces the previous 3 separate calls (/api/sentiment, /api/score, /api/gemini)
       const agent = agentRef.current;
       if (!agent) throw new Error('Agent not initialized');
 
@@ -316,6 +381,8 @@ export default function InterviewPage() {
         wpm: useInterviewStore.getState().wordsPerMinute,
         loudnessDb: useInterviewStore.getState().loudnessDb,
         fillerDensity: fillerResult.density,
+        codeContent: useInterviewStore.getState().currentCode || undefined,
+        codeTestResults: useInterviewStore.getState().codeTestResults || undefined,
       };
 
       const { systemPrompt, context } = agent.getPromptAndContext(liveSignals);
@@ -331,6 +398,7 @@ export default function InterviewPage() {
           questionType: store.currentQuestionType || 'behavioral',
           jobRole: store.jobProfile,
           expectedPoints: agent.getCurrentExpectedPoints(),
+          testResults: useInterviewStore.getState().codeTestResults,
         }),
       });
 
@@ -359,6 +427,7 @@ export default function InterviewPage() {
           fillerDensity: fillerResult.density,
           dominantEmotion: store.currentEmotion?.dominant || 'neutral',
           wpm: useInterviewStore.getState().wordsPerMinute,
+          codeTestResults: useInterviewStore.getState().codeTestResults || undefined,
         },
         gaps: [],
         followUpAsked: store.currentQuestionIsFollowUp,
@@ -395,7 +464,17 @@ export default function InterviewPage() {
         setQuestionCount((c) => c + 1);
       }
 
-      store.setCurrentQuestion(question, qId, qType, undefined, isFollowUp);
+      store.setCurrentQuestion(question, qId, qType, action.testCases, isFollowUp);
+
+      // Code playground logic
+      if (qType === 'coding') {
+        setShowCode(true);
+        setCodingSubState(isFollowUp ? 'followup' : 'coding');
+      } else if (!isFollowUp) {
+        setShowCode(false);
+        setCodingSubState(null);
+        store.setCurrentCode('');
+      }
 
       // Use Enhanced TTS (fires in parallel with UI updates)
       speak(question, () => store.setIsSpeaking(true), () => store.setIsSpeaking(false));
@@ -415,7 +494,9 @@ export default function InterviewPage() {
         <div className="flex items-center gap-4">
           <PreptWordmark />
           <div className="h-4 w-px bg-border" />
-          <span className="font-mono text-xs text-fg-muted uppercase tracking-widest flex items-center gap-2">
+          <span className="text-sm font-medium text-fg-muted tracking-wide">{store.jobProfile}</span>
+          <div className="h-4 w-px bg-border" />
+          <span className={`prept-label inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full`}>
             <span className={`w-1.5 h-1.5 rounded-full ${store.mode === 'real' ? 'bg-success' : 'bg-accent'}`} />
             <span className={store.mode === 'real' ? 'text-success' : 'text-accent'}>{store.mode} MODE</span>
           </span>
@@ -451,7 +532,7 @@ export default function InterviewPage() {
             {/* Real-time emotion overlay */}
             <EmotionOverlay videoRef={videoRef} />
             
-            {store.currentEmotion && (
+            {store.currentEmotion && !(store.currentQuestionType === 'coding' && !store.currentQuestionIsFollowUp) && (
               <div className="absolute top-3 left-3 px-2 py-1 prept-glass rounded-lg text-[10px] font-mono font-bold uppercase flex items-center gap-2 text-fg">
                 <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
                 {store.currentEmotion.dominant}
@@ -497,7 +578,11 @@ export default function InterviewPage() {
         </div>
 
         {/* PANE 2: Center Workspace */}
-        <div className="flex-grow min-w-0 flex flex-col h-full overflow-hidden bg-bg">
+        <div className={`flex flex-col h-full overflow-hidden bg-bg transition-all duration-300 ${
+          showCode 
+            ? 'w-[420px] shrink-0 border-r border-border' 
+            : 'flex-grow min-w-0'
+        }`}>
           
           {/* Question Banner */}
           <div className="bg-surface border-b border-border p-6 shrink-0">
@@ -536,65 +621,101 @@ export default function InterviewPage() {
               </button>
             )}
             <button
-              onClick={handleSubmitAnswer}
-              disabled={isProcessing || isEnding || store.transcriptWordCount < 5}
+              onClick={codingSubState === 'coding' ? handleSubmitCode : handleSubmitAnswer}
+              disabled={isProcessing || isEnding || (codingSubState !== 'coding' && store.transcriptWordCount < 5)}
               className="w-full prept-btn-primary h-12 justify-center text-sm font-bold uppercase tracking-widest"
             >
               {isProcessing ? (
-                <><Loader2 size={18} className="animate-spin text-bg" /> Transmitting...</>
+                codingSubState === 'coding' ? (
+                  <><Loader2 size={18} className="animate-spin text-bg" /> Transmitting...</>
+                ) : (
+                  <><Loader2 size={18} className="animate-spin text-bg" /> Transmitting...</>
+                )
               ) : (
-                <><Check size={18} /> Submit Response</>
+                codingSubState === 'coding' ? (
+                  <><Check size={18} /> Submit Code</>
+                ) : (
+                  <><Check size={18} /> Submit Response</>
+                )
               )}
             </button>
           </div>
         </div>
 
-        {/* PANE 3: Right Side - Side Info & Previous Turns Panel */}
-        <div className="w-[360px] shrink-0 bg-surface border-l border-border p-6 overflow-y-auto scrollbar-custom flex flex-col gap-6 z-10">
-          {/* Expected guidance points in practice mode */}
-          {store.mode === 'practice' && agentRef.current && agentRef.current.getCurrentExpectedPoints().length > 0 && (
-            <div className="prept-panel p-5 flex flex-col gap-3">
-              <h3 className="prept-label">Expected Points</h3>
-              <ul className="space-y-3">
-                {agentRef.current.getCurrentExpectedPoints().map((pt, i) => (
-                  <li key={i} className="text-sm text-fg flex items-start gap-3">
-                    <span className="w-1.5 h-1.5 rounded-full bg-accent mt-2 shrink-0" />
-                    <span className="leading-relaxed">{pt}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {/* Session History turns */}
-          <div className="flex flex-col gap-4">
-            <h3 className="prept-label">Previous Turns</h3>
-            {store.turns.length === 0 ? (
-              <div className="text-xs text-fg-muted italic">No turns completed yet.</div>
-            ) : (
-              <div className="space-y-4">
-                {store.turns.slice().reverse().map((turn) => (
-                  <div key={turn.questionId} className="prept-panel p-4 text-sm flex flex-col gap-3">
-                    <div className="flex justify-between items-center text-[10px] font-mono text-fg-muted uppercase">
-                      <span>{turn.questionType}</span>
-                      {store.mode === 'practice' && (
-                        <span className={`font-bold px-2 py-0.5 rounded-md ${turn.scores.quality >= 7 ? 'bg-success/10 text-success' : turn.scores.quality >= 5 ? 'bg-warn/10 text-warn' : 'bg-danger/10 text-danger'}`}>
-                          Score: {turn.scores.quality}/10
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-fg font-medium text-sm line-clamp-3 leading-snug">{turn.question}</p>
-                    {turn.answerSummary && (
-                      <div className="text-xs text-fg-muted border-t border-border-soft pt-3 italic leading-relaxed">
-                        Summary: {turn.answerSummary}
-                      </div>
-                    )}
-                  </div>
-                ))}
+        {/* PANE 3: Right Side - Coding Terminal (if coding) OR Side Info Panel (if verbal) */}
+        <AnimatePresence mode="wait">
+          {showCode ? (
+            <motion.div 
+              key="coding-panel"
+              initial={{ width: 0, opacity: 0 }}
+              animate={{ width: '100%', flex: 1, opacity: 1 }}
+              exit={{ width: 0, opacity: 0 }}
+              transition={{ duration: 0.25 }}
+              className="border-l border-border bg-surface flex flex-col h-full z-10"
+            >
+              <div className="flex items-center gap-2 px-6 py-4 bg-surface-raised border-b border-border">
+                <CodeIcon size={16} className="text-accent" />
+                <span className="prept-label">Code Playground</span>
               </div>
-            )}
-          </div>
-        </div>
+              <div className="flex-1 p-4 pb-2 relative min-h-0">
+                <CodePlayground onSubmitCode={codingSubState === 'coding' ? handleSubmitCode : undefined} />
+              </div>
+            </motion.div>
+          ) : (
+            <motion.div
+              key="history-panel"
+              initial={{ width: 0, opacity: 0 }}
+              animate={{ width: '360px', opacity: 1 }}
+              exit={{ width: 0, opacity: 0 }}
+              transition={{ duration: 0.25 }}
+              className="w-[360px] shrink-0 bg-surface border-l border-border p-6 overflow-y-auto scrollbar-custom flex flex-col gap-6 z-10"
+            >
+              {/* Expected guidance points in practice mode */}
+              {store.mode === 'practice' && agentRef.current && agentRef.current.getCurrentExpectedPoints().length > 0 && (
+                <div className="prept-panel p-5 flex flex-col gap-3">
+                  <h3 className="prept-label">Expected Points</h3>
+                  <ul className="space-y-3">
+                    {agentRef.current.getCurrentExpectedPoints().map((pt, i) => (
+                      <li key={i} className="text-sm text-fg flex items-start gap-3">
+                        <span className="w-1.5 h-1.5 rounded-full bg-accent mt-2 shrink-0" />
+                        <span className="leading-relaxed">{pt}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Session History turns */}
+              <div className="flex flex-col gap-4">
+                <h3 className="prept-label">Previous Turns</h3>
+                {store.turns.length === 0 ? (
+                  <div className="text-xs text-fg-muted italic">No turns completed yet.</div>
+                ) : (
+                  <div className="space-y-4">
+                    {store.turns.slice().reverse().map((turn) => (
+                      <div key={turn.questionId} className="prept-panel p-4 text-sm flex flex-col gap-3">
+                        <div className="flex justify-between items-center text-[10px] font-mono text-fg-muted uppercase">
+                          <span>{turn.questionType}</span>
+                          {store.mode === 'practice' && (
+                            <span className={`font-bold px-2 py-0.5 rounded-md ${turn.scores.quality >= 7 ? 'bg-success/10 text-success' : turn.scores.quality >= 5 ? 'bg-warn/10 text-warn' : 'bg-danger/10 text-danger'}`}>
+                              Score: {turn.scores.quality}/10
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-fg font-medium text-sm line-clamp-3 leading-snug">{turn.question}</p>
+                        {turn.answerSummary && (
+                          <div className="text-xs text-fg-muted border-t border-border-soft pt-3 italic leading-relaxed">
+                            Summary: {turn.answerSummary}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
       </div>
       
