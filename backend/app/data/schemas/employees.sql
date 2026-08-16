@@ -1,1 +1,0 @@
-CREATE TABLE employees (id INT, name VARCHAR(100), department VARCHAR(50));\n

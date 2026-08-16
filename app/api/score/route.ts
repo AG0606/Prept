@@ -90,6 +90,7 @@ async function scoreWithGroq(prompt: string): Promise<ReturnType<typeof parseSco
     }
 
     const data = await response.json();
+    if (!data.choices || !data.choices[0]) return null;
     const text = data.choices[0].message.content;
     return parseScoreResponse(text);
   } catch (error) {
@@ -106,7 +107,7 @@ async function scoreWithGemini(prompt: string): Promise<ReturnType<typeof parseS
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({
-      model: 'gemini-2.0-flash',
+      model: 'gemini-flash-latest',
       generationConfig: {
         responseMimeType: 'application/json',
         temperature: 0.3,
@@ -129,7 +130,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const { question, answer, jobRole, questionType, expectedPoints, testResults } = await req.json();
+  let body;
+  try {
+    body = await req.json();
+  } catch (e) {
+    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+  }
+  const { question, answer, jobRole, questionType, expectedPoints, testResults } = body;
 
   // Try HuggingFace first if configured
   if (HF_MODEL_URL && process.env.HF_TOKEN) {
@@ -143,8 +150,10 @@ export async function POST(req: NextRequest) {
         },
         body: JSON.stringify({ inputs: input }),
       });
-      const raw = await res.json();
-      if (raw[0]) return NextResponse.json(raw[0]);
+      if (res.ok) {
+        const raw = await res.json();
+        if (Array.isArray(raw) && raw[0]) return NextResponse.json(raw[0]);
+      }
     } catch {
       // Fall through to LLM scoring
     }

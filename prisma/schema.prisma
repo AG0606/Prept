@@ -75,6 +75,8 @@ model InterviewSession {
 model Resume {
   id                 String   @id @default(uuid())
   name               String
+  email              String?
+  education          String?  // JSON string
   experience         String   // JSON string
   skills             String   // JSON string
   projects           String   // JSON string
@@ -87,6 +89,19 @@ model Resume {
   userId             String
   user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   interviews         InterviewSession[]
+  questions          ResumeQuestion[]
+}
+
+model ResumeQuestion {
+  id          String   @id @default(cuid())
+  resumeId    String
+  resume      Resume   @relation(fields: [resumeId], references: [id], onDelete: Cascade)
+  jobProfile  String
+  questions   String   // JSON stringified array of pre-generated questions
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([resumeId, jobProfile])
 }
 
 model Turn {

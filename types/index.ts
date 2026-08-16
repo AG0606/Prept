@@ -5,6 +5,7 @@
 // ── Resume Types ─────────────────────────────────────────────
 
 export interface ResumeData {
+  id?: string;
   name: string;
   email: string;
   skills: string[];

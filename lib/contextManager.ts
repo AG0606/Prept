@@ -128,20 +128,26 @@ export class ContextManager {
   }
 
   /** Build the compressed context string to send to Gemini */
-  buildGeminiContext(liveSignals?: LiveSignals): string {
+  buildGeminiContext(liveSignals?: LiveSignals, currentQuestionType?: string, isFollowUp?: boolean): string {
     const history = this.getCompressedHistory();
     const threads = this.ctx.openThreads.slice(0, 3).join(', ');
     const typeCounts = this.getQuestionTypeCounts();
     const uncovered = this.getResumeTopicsNotYetCovered();
 
-    const parts = [
-      `=RESUME= ${trimToTokenBudget(this.ctx.resumeSnapshot, TOKEN_BUDGETS.RESUME_CONTEXT)}`,
-      `=ROLE= ${this.ctx.jobProfile}`,
-      `=HISTORY= ${trimToTokenBudget(history, TOKEN_BUDGETS.CONVERSATION_HISTORY)}`,
-      `=QUESTION_COUNTS= tech:${typeCounts.technical} behavioral:${typeCounts.behavioral} coding:${typeCounts.coding} total:${this.ctx.turns.length}`,
-      threads ? `=OPEN_THREADS= ${threads}` : '',
-      uncovered.length > 0 ? `=UNCOVERED_TOPICS= ${uncovered.join('; ')}` : '',
-    ];
+    const parts: string[] = [];
+
+    // Conditional resume injection: skip for coding questions and follow-ups
+    // where the candidate's resume is irrelevant (saves ~400-800 tokens)
+    const skipResume = currentQuestionType === 'coding' || isFollowUp === true;
+    if (!skipResume) {
+      parts.push(`=RESUME= ${trimToTokenBudget(this.ctx.resumeSnapshot, TOKEN_BUDGETS.RESUME_CONTEXT)}`);
+    }
+
+    parts.push(`=ROLE= ${this.ctx.jobProfile}`);
+    parts.push(`=HISTORY= ${trimToTokenBudget(history, TOKEN_BUDGETS.CONVERSATION_HISTORY)}`);
+    parts.push(`=QUESTION_COUNTS= tech:${typeCounts.technical} behavioral:${typeCounts.behavioral} coding:${typeCounts.coding} total:${this.ctx.turns.length}`);
+    if (threads) parts.push(`=OPEN_THREADS= ${threads}`);
+    if (uncovered.length > 0 && !skipResume) parts.push(`=UNCOVERED_TOPICS= ${uncovered.join('; ')}`);
 
     // Include live signals so the AI can adapt to the candidate's state
     if (liveSignals) {

@@ -41,6 +41,7 @@ export function useAudioRecorder() {
       setIsRecording(true);
     } catch (err) {
       console.error('Failed to start audio recording:', err);
+      throw err;
     }
   }, []);
 

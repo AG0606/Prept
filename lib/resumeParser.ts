@@ -9,14 +9,32 @@ export async function parseResumePDF(file: File, jobProfile?: string): Promise<R
   const pdfjsLib = await import('pdfjs-dist');
   pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
 
-  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  let pdf;
+  try {
+    pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  } catch (error) {
+    throw new Error('Failed to parse PDF file. It might be corrupted or encrypted.');
+  }
 
   let fullText = '';
   for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
-    const content = await page.getTextContent();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    fullText += content.items.map((item: any) => item.str).join(' ') + '\n';
+    try {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      fullText += content.items.map((item: any) => item.str).join(' ') + '\n';
+    } catch (e) {
+      console.warn(`Failed to parse text from page ${i}`, e);
+    }
+  }
+
+  if (fullText.trim().length === 0) {
+    throw new Error('No readable text found in PDF. Make sure it is not just a scanned image.');
+  }
+
+  // Prevent Gemini token overload for massive PDFs
+  if (fullText.length > 25000) {
+    fullText = fullText.substring(0, 25000) + '\n...[Truncated for length]';
   }
 
   const structured = await extractStructuredResume(fullText, jobProfile);

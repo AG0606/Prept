@@ -9,9 +9,9 @@ import { useInterviewStore } from '@/store/interviewStore';
 export function AudioAnalyzer() {
   const analyserRef = useRef<AnalyserNode | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
   const rafRef = useRef<number>(0);
   const setAudioMetrics = useInterviewStore((s) => s.setAudioMetrics);
-  const transcriptWordCount = useInterviewStore((s) => s.transcriptWordCount);
   const isActive = useInterviewStore((s) => s.isActive);
   const speechStartTimeRef = useRef<number | null>(null);
 
@@ -24,6 +24,7 @@ export function AudioAnalyzer() {
           audio: true,
         });
         const ctx = new AudioContext();
+        audioCtxRef.current = ctx;
         const source = ctx.createMediaStreamSource(streamRef.current);
         const analyser = ctx.createAnalyser();
         analyser.fftSize = 256;
@@ -51,6 +52,7 @@ export function AudioAnalyzer() {
         const isSpeaking = state.isSpeaking;
         const currentQuestionType = state.currentQuestionType;
         const currentQuestionIsFollowUp = state.currentQuestionIsFollowUp;
+        const transcriptWordCount = state.transcriptWordCount;
 
         const isSpeechActive = isListening && !isSpeaking && !(currentQuestionType === 'coding' && !currentQuestionIsFollowUp);
 
@@ -91,8 +93,11 @@ export function AudioAnalyzer() {
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       streamRef.current?.getTracks().forEach((t) => t.stop());
+      if (audioCtxRef.current && audioCtxRef.current.state !== 'closed') {
+        audioCtxRef.current.close().catch(() => {});
+      }
     };
-  }, [isActive, setAudioMetrics, transcriptWordCount]);
+  }, [isActive, setAudioMetrics]);
 
   return null;
 }

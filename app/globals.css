@@ -25,12 +25,12 @@
     --accent-glow: transparent; /* No glows */
 
     /* ═══ Semantic ═══ */
-    --success: #000000;
-    --success-muted: rgba(0,0,0,0.05);
-    --warn: #000000;
-    --warn-muted: rgba(0,0,0,0.05);
-    --danger: #000000;
-    --danger-muted: rgba(0,0,0,0.05);
+    --success: #10B981;
+    --success-muted: rgba(16, 185, 129, 0.1);
+    --warn: #F59E0B;
+    --warn-muted: rgba(245, 158, 11, 0.1);
+    --danger: #EF4444;
+    --danger-muted: rgba(239, 68, 68, 0.1);
 
     /* ═══ Radii (Strict Brutalist) ═══ */
     --radius-sm: 0px;
@@ -49,10 +49,6 @@
     --gradient-brand: var(--accent);
     --gradient-hero: none;
     --gradient-mesh: none;
-  }
-
-  /* Strip dark mode entirely - empty block */
-  .dark {
   }
 
   * {

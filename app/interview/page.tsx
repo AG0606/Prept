@@ -6,7 +6,6 @@ import { useInterviewStore } from '@/store/interviewStore';
 import { ContextManager } from '@/lib/contextManager';
 import { GeminiAgent } from '@/lib/geminiAgent';
 import { detectFillers } from '@/lib/fillerDetector';
-import { scoreResponse } from '@/lib/models/qualityScorer';
 import { EmotionOverlay } from '@/components/EmotionOverlay';
 import { AudioAnalyzer } from '@/components/AudioAnalyzer';
 import { TranscriptDisplay } from '@/components/TranscriptDisplay';
@@ -18,7 +17,6 @@ import { Check, Loader2, Code as CodeIcon, MessageSquare } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useEnhancedTTS } from '@/hooks/useEnhancedTTS';
 import { useAudioRecorder } from '@/hooks/useAudioRecorder';
-import { ThemeToggle } from '@/components/ThemeToggle';
 
 export default function InterviewPage() {
   const router = useRouter();
@@ -27,7 +25,33 @@ export default function InterviewPage() {
   const agentRef = useRef<GeminiAgent | null>(null);
   const hasStartedRef = useRef(false);
 
-  const store = useInterviewStore();
+  const store = {
+    resumeData: useInterviewStore(s => s.resumeData),
+    jobProfile: useInterviewStore(s => s.jobProfile),
+    mode: useInterviewStore(s => s.mode),
+    techSplit: useInterviewStore(s => s.techSplit),
+    hrSplit: useInterviewStore(s => s.hrSplit),
+    codeSplit: useInterviewStore(s => s.codeSplit),
+    isListening: useInterviewStore(s => s.isListening),
+    currentEmotion: useInterviewStore(s => s.currentEmotion),
+    currentQuestionId: useInterviewStore(s => s.currentQuestionId),
+    currentQuestion: useInterviewStore(s => s.currentQuestion),
+    currentQuestionType: useInterviewStore(s => s.currentQuestionType),
+    currentQuestionIsFollowUp: useInterviewStore(s => s.currentQuestionIsFollowUp),
+    transcriptWordCount: useInterviewStore(s => s.transcriptWordCount),
+    turns: useInterviewStore(s => s.turns),
+    isSpeaking: useInterviewStore(s => s.isSpeaking),
+    setCurrentQuestion: useInterviewStore(s => s.setCurrentQuestion),
+    setIsSpeaking: useInterviewStore(s => s.setIsSpeaking),
+    endSession: useInterviewStore(s => s.endSession),
+    addTurn: useInterviewStore(s => s.addTurn),
+    setTranscript: useInterviewStore(s => s.setTranscript),
+    setCurrentCode: useInterviewStore(s => s.setCurrentCode),
+    setIsListening: useInterviewStore(s => s.setIsListening),
+    setQualityScore: useInterviewStore(s => s.setQualityScore),
+    setSentiment: useInterviewStore(s => s.setSentiment),
+    setFillerCount: useInterviewStore(s => s.setFillerCount),
+  };
   const [isProcessing, setIsProcessing] = useState(false);
   const [showCode, setShowCode] = useState(false);
   const [questionCount, setQuestionCount] = useState(0);
@@ -49,12 +73,43 @@ export default function InterviewPage() {
     ctxManagerRef.current = ctxManager;
     
     // Pass the config to the agent
-    agentRef.current = new GeminiAgent(ctxManager, {
+    const agent = new GeminiAgent(ctxManager, {
       mode: store.mode,
       techSplit: store.techSplit,
       hrSplit: store.hrSplit,
       codeSplit: store.codeSplit
     });
+    agentRef.current = agent;
+
+    // Load or generate cached resume-specific questions for this resume + role
+    if (store.resumeData?.id) {
+      const resumeId = store.resumeData.id;
+      const jobProfile = store.jobProfile;
+      fetch(`/api/resume-questions?resumeId=${resumeId}&jobProfile=${encodeURIComponent(jobProfile)}`)
+        .then(res => res.ok ? res.json() : null)
+        .then(data => {
+          if (data?.questions && data.questions.length > 0) {
+            agent.setCachedQuestions(data.questions);
+          } else {
+            // Background pre-generate questions so they are cached for future runs & later turns
+            fetch('/api/resume-questions', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                resumeId,
+                jobProfile,
+                resumeData: store.resumeData,
+              })
+            }).then(r => r.ok ? r.json() : null)
+              .then(genData => {
+                if (genData?.questions) {
+                  agent.setCachedQuestions(genData.questions);
+                }
+              }).catch(() => {});
+          }
+        })
+        .catch(err => console.warn('Failed to load cached resume questions:', err));
+    }
 
     let videoElement: HTMLVideoElement | null = null;
     navigator.mediaDevices
@@ -84,7 +139,10 @@ export default function InterviewPage() {
   // Sync client microphone recording with global listening state
   useEffect(() => {
     if (store.isListening) {
-      startRecording();
+      startRecording().catch(err => {
+        alert("Microphone access denied or error occurred. Please check permissions.");
+        store.setIsListening(false);
+      });
     } else {
       if (!isSubmittingRef.current) {
         cancelRecording();
@@ -99,11 +157,11 @@ export default function InterviewPage() {
 
       const signals: LiveSignals = {
         dominantEmotion: store.currentEmotion?.dominant,
-        wpm: store.wordsPerMinute,
-        loudnessDb: store.loudnessDb,
-        fillerDensity: store.fillerDensity,
-        codeContent: store.currentCode || undefined,
-        codeTestResults: store.codeTestResults || undefined,
+        wpm: useInterviewStore.getState().wordsPerMinute,
+        loudnessDb: useInterviewStore.getState().loudnessDb,
+        fillerDensity: useInterviewStore.getState().fillerDensity,
+        codeContent: useInterviewStore.getState().currentCode || undefined,
+        codeTestResults: useInterviewStore.getState().codeTestResults || undefined,
       };
 
       try {
@@ -217,14 +275,14 @@ export default function InterviewPage() {
 
     try {
       // Evaluate the written code in the sandbox context
-      const codeInput = store.currentCode;
-      const testResults = store.codeTestResults;
+      const codeInput = useInterviewStore.getState().currentCode;
+      const testResults = useInterviewStore.getState().codeTestResults;
       
       const turnSummary: TurnSummary = {
         questionId: store.currentQuestionId,
         question: store.currentQuestion,
         questionType: 'coding',
-        answerSummary: `Code sandbox submission: [${store.currentCode ? 'Written Code' : 'Empty Solution'}]. Test cases passed: ${testResults?.passed || 0}/${testResults?.total || 0}`,
+        answerSummary: `Code sandbox submission: [${codeInput ? 'Written Code' : 'Empty Solution'}]. Test cases passed: ${testResults?.passed || 0}/${testResults?.total || 0}`,
         fullAnswer: codeInput,
         scores: {
           // Score calculation: percentage of tests passed scaled to 10
@@ -266,7 +324,7 @@ export default function InterviewPage() {
 
     try {
       const audioBlob = await stopRecording();
-      let finalTranscript = store.transcript;
+      let finalTranscript = useInterviewStore.getState().transcript;
 
       // Double-layered STT processing using Groq Whisper endpoint
       if (audioBlob && audioBlob.size > 100) {
@@ -293,32 +351,70 @@ export default function InterviewPage() {
 
       // Check for validation logic (require minimum words for verbal questions)
       const wordCount = finalTranscript.trim().split(/\s+/).filter(Boolean).length;
-      if (wordCount < 2) {
+      if (wordCount < 5) {
+        alert("Your answer is too short to evaluate. Please speak or type a more detailed response before submitting.");
+        store.setIsListening(false);
         setIsProcessing(false);
         isSubmittingRef.current = false;
         return;
       }
 
-      // Live metrics processing
+      // Local filler detection (no API call needed)
       const fillerResult = detectFillers(finalTranscript);
-      const sentimentResult = await fetch('/api/sentiment', {
+
+      // ── UNIFIED API CALL: scoring + sentiment + next question in ONE request ──
+      // This replaces the previous 3 separate calls (/api/sentiment, /api/score, /api/gemini)
+      const agent = agentRef.current;
+      if (!agent) throw new Error('Agent not initialized');
+
+      // Check if we should end session before making API call
+      if (agent.shouldEndSession()) {
+        const endAction = agent.processUnifiedResponse({ type: 'end_session', reason: 'All planned questions completed' });
+        store.endSession();
+        router.push('/report');
+        return;
+      }
+
+      // Get prompt + context with conditional resume injection
+      const liveSignals: LiveSignals = {
+        dominantEmotion: store.currentEmotion?.dominant || 'neutral',
+        wpm: useInterviewStore.getState().wordsPerMinute,
+        loudnessDb: useInterviewStore.getState().loudnessDb,
+        fillerDensity: fillerResult.density,
+        codeContent: useInterviewStore.getState().currentCode || undefined,
+        codeTestResults: useInterviewStore.getState().codeTestResults || undefined,
+      };
+
+      const { systemPrompt, context } = agent.getPromptAndContext(liveSignals);
+
+      const unifiedRes = await fetch('/api/agent-turn', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: finalTranscript }),
+        body: JSON.stringify({
+          systemInstruction: systemPrompt,
+          context,
+          lastAnswer: finalTranscript.slice(0, 800),
+          question: store.currentQuestion,
+          questionType: store.currentQuestionType || 'behavioral',
+          jobRole: store.jobProfile,
+          expectedPoints: agent.getCurrentExpectedPoints(),
+          testResults: useInterviewStore.getState().codeTestResults,
+        }),
       });
-      const sentimentLabel = sentimentResult.ok 
-        ? (await sentimentResult.json()).label 
-        : 'neutral';
 
-      const qualityResult = await scoreResponse(
-        store.currentQuestion,
-        finalTranscript,
-        store.jobProfile,
-        store.currentQuestionType || undefined,
-        agentRef.current?.getCurrentExpectedPoints() || [],
-        store.codeTestResults
-      );
+      if (!unifiedRes.ok) {
+        throw new Error(`Agent-turn API error: ${unifiedRes.statusText}`);
+      }
 
+      const unifiedData = await unifiedRes.json();
+      const { evaluation, nextAction } = unifiedData;
+
+      // Update live telemetry panel
+      store.setQualityScore(evaluation.score);
+      store.setSentiment(evaluation.sentiment);
+      store.setFillerCount(fillerResult.count, fillerResult.density);
+
+      // Build turn summary
       const turnSummary: TurnSummary = {
         questionId: store.currentQuestionId,
         question: store.currentQuestion,
@@ -326,12 +422,12 @@ export default function InterviewPage() {
         answerSummary: finalTranscript.slice(0, 150) + (finalTranscript.length > 150 ? '...' : ''),
         fullAnswer: finalTranscript,
         scores: {
-          quality: qualityResult.score,
-          sentiment: sentimentLabel,
+          quality: evaluation.score,
+          sentiment: evaluation.sentiment,
           fillerDensity: fillerResult.density,
           dominantEmotion: store.currentEmotion?.dominant || 'neutral',
-          wpm: store.wordsPerMinute,
-          codeTestResults: store.codeTestResults || undefined,
+          wpm: useInterviewStore.getState().wordsPerMinute,
+          codeTestResults: useInterviewStore.getState().codeTestResults || undefined,
         },
         gaps: [],
         followUpAsked: store.currentQuestionIsFollowUp,
@@ -339,20 +435,57 @@ export default function InterviewPage() {
 
       ctxManagerRef.current?.addTurn(turnSummary);
       store.addTurn(turnSummary);
-      
-      await getNextQuestion(finalTranscript, {
-        quality: qualityResult.score,
-        sentiment: sentimentLabel,
-        fillerDensity: fillerResult.density,
-      });
-      
+
+      // Process the next action through agent-side logic (type enforcement, follow-up tracking)
+      const action = agent.processUnifiedResponse(nextAction);
+
+      if (action.type === 'end_session') {
+        setIsEnding(true);
+        speak(action.finalImpression || 'Thank you for completing this interview. Great job!',
+          () => store.setIsSpeaking(true),
+          () => store.setIsSpeaking(false)
+        );
+        setTimeout(() => {
+          const state = useInterviewStore.getState();
+          if (state.isActive) {
+            store.endSession();
+            router.push('/report');
+          }
+        }, 7000);
+        return;
+      }
+
+      const question = action.question ?? 'Tell me about yourself.';
+      const qId = action.question_id ?? `q_${questionCount + 1}`;
+      const qType = action.questionType ?? 'behavioral';
+      const isFollowUp = action.isFollowUp === true;
+
+      if (!isFollowUp) {
+        setQuestionCount((c) => c + 1);
+      }
+
+      store.setCurrentQuestion(question, qId, qType, action.testCases, isFollowUp);
+
+      // Code playground logic
+      if (qType === 'coding') {
+        setShowCode(true);
+        setCodingSubState(isFollowUp ? 'followup' : 'coding');
+      } else if (!isFollowUp) {
+        setShowCode(false);
+        setCodingSubState(null);
+        store.setCurrentCode('');
+      }
+
+      // Use Enhanced TTS (fires in parallel with UI updates)
+      speak(question, () => store.setIsSpeaking(true), () => store.setIsSpeaking(false));
+
     } catch (err) {
       console.error('Submit error:', err);
     } finally {
       isSubmittingRef.current = false;
       setIsProcessing(false);
     }
-  }, [store, isProcessing, getNextQuestion, stop, stopRecording]);
+  }, [store, isProcessing, questionCount, stop, stopRecording, speak, router]);
   
   return (
     <main className="min-h-screen bg-bg text-fg flex flex-col h-screen overflow-hidden">
@@ -372,7 +505,6 @@ export default function InterviewPage() {
         <div className="flex items-center gap-6">
           <span className="font-grotesk text-sm text-fg-muted tracking-wider">Q.{Math.min(12, store.turns.filter(t => !t.followUpAsked && t.answerSummary !== '(skipped)').length + 1)} / 12</span>
           {voiceSelectorUI}
-          <ThemeToggle />
           <button
             onClick={() => { store.endSession(); router.push('/report'); }}
             className="px-4 py-1.5 border border-danger text-danger hover:bg-danger-muted rounded-lg text-sm font-bold transition-colors"
@@ -437,16 +569,7 @@ export default function InterviewPage() {
           ) : (
             <div className="prept-panel p-5 flex flex-col gap-3">
               <h3 className="prept-label">Real Mode Active</h3>
-              <div className="flex items-center justify-between text-xs text-fg-muted font-mono">
-                <span>Mic Audio Input:</span>
-                <span className="text-fg">{Math.max(-60, Math.round(store.loudnessDb))} dB</span>
-              </div>
-              <div className="w-full h-1.5 bg-border rounded-full overflow-hidden">
-                <div 
-                  className="h-full bg-success rounded-full" 
-                  style={{ width: `${Math.max(0, Math.min(100, ((store.loudnessDb + 60) / 60) * 100))}%` }}
-                />
-              </div>
+              <RealModeMicMonitor />
               <div className="text-[10px] text-fg-muted leading-normal">
                 Live performance tracking is running silently. Your response evaluation is generated dynamically by AI behind the scenes.
               </div>
@@ -599,5 +722,23 @@ export default function InterviewPage() {
       {/* Hidden Audio Analyzer for metrics */}
       <AudioAnalyzer />
     </main>
+  );
+}
+
+function RealModeMicMonitor() {
+  const loudnessDb = useInterviewStore(s => s.loudnessDb);
+  return (
+    <>
+      <div className="flex items-center justify-between text-xs text-fg-muted font-mono">
+        <span>Mic Audio Input:</span>
+        <span className="text-fg">{Math.max(-60, Math.round(loudnessDb))} dB</span>
+      </div>
+      <div className="w-full h-1.5 bg-border rounded-full overflow-hidden">
+        <div 
+          className="h-full bg-success rounded-full" 
+          style={{ width: `${Math.max(0, Math.min(100, ((loudnessDb + 60) / 60) * 100))}%` }}
+        />
+      </div>
+    </>
   );
 }

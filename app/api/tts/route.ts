@@ -14,13 +14,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    let body;
+    try {
+      body = await req.json();
+    } catch (e) {
+      return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+    }
     const { 
       text, 
       voice = 'en-US-AvaMultilingualNeural', 
       rate = 'default', 
       pitch = 'default', 
       volume = 'default' 
-    } = await req.json();
+    } = body;
 
     if (!text) {
       return NextResponse.json({ error: 'Text is required' }, { status: 400 });

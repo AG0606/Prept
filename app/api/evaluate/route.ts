@@ -12,7 +12,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { turns, jobProfile, candidateName } = await req.json();
+    let body;
+    try {
+      body = await req.json();
+    } catch (e) {
+      return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+    }
+    const { turns, jobProfile, candidateName } = body;
 
     if (!turns || turns.length === 0) {
       return NextResponse.json({
@@ -29,48 +35,70 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({
-      model: 'gemini-2.0-flash',
-      generationConfig: {
-        responseMimeType: 'application/json',
-        temperature: 0.3,
+    let text = '';
+
+    // Primary: Gemini Flash
+    try {
+      const genAI = new GoogleGenerativeAI(apiKey);
+      const model = genAI.getGenerativeModel({
+        model: 'gemini-flash-latest',
+        generationConfig: {
+          responseMimeType: 'application/json',
+          temperature: 0.3,
+        }
+      });
+      const result = await model.generateContent(prompt);
+      text = result.response.text().trim();
+    } catch (geminiError) {
+      console.warn('Gemini evaluate failed, falling back to Groq...', geminiError);
+      
+      const groqKey = process.env.GROQ_API_KEY;
+      if (groqKey) {
+        try {
+          const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${groqKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              model: 'llama-3.3-70b-versatile',
+              messages: [
+                { role: 'system', content: 'You are an interview session evaluator. Return ONLY valid JSON with the requested fields.' },
+                { role: 'user', content: prompt }
+              ],
+              response_format: { type: 'json_object' },
+              temperature: 0.3,
+              max_tokens: 800,
+            })
+          });
+
+          if (groqRes.ok) {
+            const groqData = await groqRes.json();
+            if (groqData.choices?.[0]) {
+              text = groqData.choices[0].message.content.trim();
+            }
+          }
+        } catch (groqError) {
+          console.error('Groq fallback also failed:', groqError);
+        }
       }
-    });
+    }
 
-    const turnSummaries = turns.map((t: any, i: number) => 
-      `Q${i+1} [${t.questionType}]: ${t.question}\nAnswer Summary: ${t.answerSummary}\nScore: ${t.scores?.quality || 0}/10`
-    ).join('\n\n');
-
-    const prompt = `You are evaluating an interview session for candidate ${candidateName} applying for a ${jobProfile} role.
-Based on the following Q&A summaries, provide a final impression and 2-3 specific recommendations for improvement.
-
-Interview Data:
-${turnSummaries}
-
-Return ONLY valid JSON in this exact format:
-{
-  "impression": "2-3 sentences summarizing their overall performance, technical depth, and communication skills.",
-  "recommendations": ["Recommendation 1", "Recommendation 2", "Recommendation 3"]
-}
-`;
-
-    const result = await model.generateContent(prompt);
-    let text = result.response.text().trim();
     if (text.startsWith('```')) {
       text = text.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
     }
     
     try {
-      const parsed = JSON.parse(text);
+      const parsed = text ? JSON.parse(text) : null;
       return NextResponse.json({
-        impression: parsed.impression,
-        recommendations: parsed.recommendations || [],
+        impression: parsed?.impression || 'The candidate demonstrated practical strengths and communication capability across the session.',
+        recommendations: parsed?.recommendations || ['Practice structuring answers with the STAR method', 'Review core system design fundamentals'],
       });
     } catch {
       return NextResponse.json({
         impression: 'The candidate demonstrated a mix of strengths and areas for improvement across the session.',
-        recommendations: ['Practice structuring answers', 'Review technical fundamentals for this role'],
+        recommendations: ['Practice structuring answers with the STAR method', 'Review technical fundamentals for this role'],
       });
     }
 

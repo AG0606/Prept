@@ -12,10 +12,31 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { sessionId, turn } = await req.json();
+    let body;
+    try {
+      body = await req.json();
+    } catch (e) {
+      return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+    }
+    const { sessionId, turn } = body;
 
     if (!sessionId || !turn) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { email: session.user.email }
+    });
+    if (!user) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+
+    const interviewSession = await prisma.interviewSession.findFirst({
+      where: { id: sessionId, userId: user.id }
+    });
+
+    if (!interviewSession) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     const savedTurn = await prisma.turn.create({

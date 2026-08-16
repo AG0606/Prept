@@ -38,6 +38,9 @@ async function callGroq(systemPrompt: string, userMessage: string, options?: { t
   }
 
   const data = await response.json();
+  if (!data.choices || !data.choices[0]) {
+    throw new Error('Groq returned empty choices');
+  }
   return data.choices[0].message.content;
 }
 
@@ -53,7 +56,7 @@ async function callGemini(instruction: string, content: string, options?: { mode
 
   const genAI = new GoogleGenerativeAI(apiKey);
   const model = genAI.getGenerativeModel({
-    model: options?.model ?? 'gemini-2.0-flash',
+    model: options?.model ?? 'gemini-flash-latest',
     systemInstruction: instruction,
     generationConfig: {
       responseMimeType: 'application/json',
@@ -72,7 +75,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const { task, content, instruction } = await req.json();
+  let body;
+  try {
+    body = await req.json();
+  } catch (e) {
+    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+  }
+  const { task, content, instruction } = body;
 
   // ── Resume Parsing ─────────────────────────────────────────
   // LOW frequency (1x per upload) → Gemini first for quality
@@ -82,7 +91,7 @@ export async function POST(req: NextRequest) {
       const text = await callGemini(
         'You are a resume parser. Return valid JSON only.',
         prompt,
-        { model: 'gemini-2.0-flash', temperature: 0.2, maxTokens: 2000 }
+        { model: 'gemini-flash-latest', temperature: 0.2, maxTokens: 2000 }
       );
       return NextResponse.json({ text });
     } catch (error) {

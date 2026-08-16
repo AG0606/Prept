@@ -4,10 +4,10 @@ import { useSession, signOut } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, useCallback } from 'react';
 import { ResumeUploader } from '@/components/ResumeUploader';
+import { ResumeDetailModal } from '@/components/ResumeDetailModal';
 import { useInterviewStore } from '@/store/interviewStore';
 import { LogOut, FileText, Play, Settings, BarChart, Clock, Plus, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ThemeToggle } from '@/components/ThemeToggle';
 import { PreptWordmark } from '@/components/PreptLogo';
 
 const JOB_ROLES = [
@@ -38,6 +38,7 @@ export default function DashboardPage() {
   const [resumes, setResumes] = useState<any[]>([]);
   const [history, setHistory] = useState<any[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [selectedResume, setSelectedResume] = useState<any | null>(null);
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -105,7 +106,7 @@ export default function DashboardPage() {
       const rem = 100 - newCode;
       const ratio = techSplit + hrSplit > 0 ? techSplit / (techSplit + hrSplit) : 0.5;
       newTech = Math.round(rem * ratio);
-      newCode = rem - newTech;
+      newHr = rem - newTech;
     }
     setSplits(newTech, newHr, newCode);
   };
@@ -116,6 +117,26 @@ export default function DashboardPage() {
       const updated = resumes.map(r => ({ ...r, isCurrent: r.id === id }));
       setResumes(updated);
       setResumeData(updated.find(r => r.id === id));
+      if (selectedResume?.id === id) {
+        setSelectedResume(updated.find(r => r.id === id));
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleDeleteResume = async (id: string) => {
+    try {
+      await fetch(`/api/resume?id=${id}`, { method: 'DELETE' });
+      const updated = resumes.filter(r => r.id !== id);
+      setResumes(updated);
+      if (selectedResume?.id === id) {
+        setSelectedResume(null);
+      }
+      const isCurrent = resumes.find(r => r.id === id)?.isCurrent;
+      if (isCurrent) {
+        fetchDashboardData();
+      }
     } catch (e) {
       console.error(e);
     }
@@ -145,8 +166,7 @@ export default function DashboardPage() {
             </div>
           </div>
           <div className="flex items-center gap-4">
-            <ThemeToggle />
-            <div className="flex items-center gap-3 pl-4 border-l border-border-soft">
+            <div className="flex items-center gap-3 pl-4">
               <div className="w-9 h-9 rounded-full bg-gradient-to-br from-accent to-secondary p-[2px]">
                 <div className="w-full h-full rounded-full bg-surface flex items-center justify-center text-accent font-bold text-sm">
                   {session.user?.name?.charAt(0) || 'U'}
@@ -341,39 +361,88 @@ export default function DashboardPage() {
 
               {isUploading && (
                 <div className="prept-card p-6 mb-8">
-                  <ResumeUploader onUploadSuccess={() => {
-                    setIsUploading(false);
-                    fetchDashboardData();
-                  }} />
+                  <ResumeUploader 
+                    onUploadSuccess={() => {
+                      fetchDashboardData();
+                    }} 
+                    onViewProfile={(data) => {
+                      setSelectedResume(data);
+                      setIsUploading(false);
+                    }}
+                  />
                 </div>
               )}
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {resumes.map((res) => (
-                  <div key={res.id} className={`prept-bento-card p-6 transition-all ${res.isCurrent ? 'ring-2 ring-accent shadow-md' : ''}`}>
-                    <div className="flex justify-between items-start mb-4">
-                      <div className="prept-icon-badge w-10 h-10 rounded-lg flex items-center justify-center">
-                        <FileText size={20} />
-                      </div>
-                      {res.isCurrent && <span className="bg-accent text-accent-on rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-widest">Active</span>}
-                    </div>
-                    
-                    <h3 className="font-bold text-lg mb-1 truncate">{res.name}</h3>
-                    <p className="text-xs text-fg-muted font-mono mb-4">{new Date(res.updatedAt).toLocaleDateString()}</p>
-                    
-                    {res.suggestions && (
-                      <div className="text-sm text-fg-muted mb-6 bg-surface-warm rounded-lg p-3 border border-border-soft line-clamp-3">
-                        {res.suggestions}
-                      </div>
-                    )}
+                {resumes.map((res) => {
+                  const rating = res.rating || 0;
+                  let ratingColor = 'text-fg-muted';
+                  let ratingBg = 'bg-surface';
+                  if (rating >= 7) { ratingColor = 'text-success'; ratingBg = 'bg-success-muted'; }
+                  else if (rating >= 5) { ratingColor = 'text-warn'; ratingBg = 'bg-warn-muted'; }
+                  else if (rating > 0) { ratingColor = 'text-danger'; ratingBg = 'bg-danger-muted'; }
+                  
+                  const skills = Array.isArray(res.skills) ? res.skills : typeof res.skills === 'string' ? JSON.parse(res.skills) : [];
+                  const topSkills = skills.slice(0, 5);
 
-                    {!res.isCurrent && (
-                      <button onClick={() => handleSetCurrentResume(res.id)} className="w-full prept-btn-secondary justify-center text-xs">
-                        Set as Active
-                      </button>
-                    )}
-                  </div>
-                ))}
+                  return (
+                    <div 
+                      key={res.id} 
+                      onClick={() => setSelectedResume(res)}
+                      className={`prept-bento-card p-6 transition-all cursor-pointer hover:border-fg-muted ${res.isCurrent ? 'ring-2 ring-accent shadow-md' : ''}`}
+                    >
+                      <div className="flex justify-between items-start mb-4">
+                        <div className="prept-icon-badge w-10 h-10 rounded-lg flex items-center justify-center">
+                          <FileText size={20} />
+                        </div>
+                        <div className="flex gap-2 items-center">
+                          {rating > 0 && (
+                            <span className={`px-2 py-1 text-xs font-mono font-bold border border-current ${ratingColor} ${ratingBg}`}>
+                              {rating}/10
+                            </span>
+                          )}
+                          {res.isCurrent && <span className="bg-accent text-accent-on rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-widest">Active</span>}
+                        </div>
+                      </div>
+                      
+                      <h3 className="font-bold text-lg mb-1 truncate">{res.name}</h3>
+                      <p className="text-xs text-fg-muted font-mono mb-4">{new Date(res.updatedAt).toLocaleDateString()}</p>
+                      
+                      {topSkills.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mb-4">
+                          {topSkills.map((skill: string, i: number) => (
+                            <span key={i} className="px-2 py-0.5 bg-surface-warm text-fg-muted text-[10px] font-mono border border-border">
+                              {skill}
+                            </span>
+                          ))}
+                          {skills.length > 5 && (
+                            <span className="px-2 py-0.5 bg-surface-warm text-fg-muted text-[10px] font-mono border border-border">
+                              +{skills.length - 5}
+                            </span>
+                          )}
+                        </div>
+                      )}
+
+                      {res.suggestions && (
+                        <div className="text-sm text-fg-muted mb-6 bg-surface-warm rounded-lg p-3 border border-border-soft line-clamp-3">
+                          {res.suggestions}
+                        </div>
+                      )}
+
+                      {!res.isCurrent && (
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleSetCurrentResume(res.id);
+                          }} 
+                          className="w-full prept-btn-secondary justify-center text-xs"
+                        >
+                          Set as Active
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
                 {resumes.length === 0 && !isUploading && (
                   <div className="col-span-full prept-panel border-dashed border-2 py-24 text-center">
                     <p className="text-fg-muted font-medium mb-4">No assets found.</p>
@@ -428,6 +497,17 @@ export default function DashboardPage() {
           )}
           
         </AnimatePresence>
+        
+        <ResumeDetailModal
+          resume={selectedResume}
+          isOpen={!!selectedResume}
+          onClose={() => setSelectedResume(null)}
+          onDelete={handleDeleteResume}
+          onSetActive={(id) => {
+            handleSetCurrentResume(id);
+            setSelectedResume(null);
+          }}
+        />
       </main>
     </div>
   );

@@ -22,7 +22,13 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const { sessionId, jobProfile, mode, techSplit, hrSplit, codeSplit } = await req.json();
+    let body;
+    try {
+      body = await req.json();
+    } catch (e) {
+      return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+    }
+    const { sessionId, jobProfile, mode, techSplit, hrSplit, codeSplit } = body;
 
     if (!sessionId || !jobProfile) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });

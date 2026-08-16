@@ -1,1 +1,0 @@
-CREATE TABLE products (id INT, name VARCHAR(100), price DECIMAL(10,2));\n

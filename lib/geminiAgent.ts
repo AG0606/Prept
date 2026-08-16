@@ -20,10 +20,35 @@ export class GeminiAgent {
   private questionCounter: number = 0;
   private consecutiveFollowUps: number = 0;
   private readonly MAX_CONSECUTIVE_FOLLOWUPS = 2;
+  private cachedResumeQuestions: Array<{ question: string; questionType?: string; expectedPoints?: string[]; description?: string }> = [];
+  private usedCachedQuestionIndices = new Set<number>();
 
   constructor(contextManager: ContextManager, config: InterviewConfig) {
     this.contextManager = contextManager;
     this.config = config;
+  }
+
+  /** Set pre-generated resume-specific questions cached in the database */
+  setCachedQuestions(questions: Array<{ question: string; questionType?: string; expectedPoints?: string[]; description?: string }>) {
+    if (Array.isArray(questions)) {
+      this.cachedResumeQuestions = questions;
+    }
+  }
+
+  /** Retrieve an unused cached resume question if available */
+  getNextCachedResumeQuestion(): { question: string; questionType: QuestionCategory; expectedPoints?: string[] } | null {
+    for (let i = 0; i < this.cachedResumeQuestions.length; i++) {
+      if (!this.usedCachedQuestionIndices.has(i)) {
+        this.usedCachedQuestionIndices.add(i);
+        const item = this.cachedResumeQuestions[i];
+        return {
+          question: item.question,
+          questionType: 'technical',
+          expectedPoints: item.expectedPoints || ['Clear architecture reasoning', 'Technical trade-offs', 'Concrete production metrics'],
+        };
+      }
+    }
+    return null;
   }
 
   /**
@@ -141,10 +166,8 @@ export class GeminiAgent {
     // Restrict the valid questionType values in the output format to only the 3 canonical types
     const validTypes = 'behavioral|technical|coding';
 
-    const askedQuestionsSummary = this.contextManager.getFullHistory()
-      .filter(t => !t.followUpAsked)
-      .map(t => `- ID: ${t.questionId} | Question: ${t.question}`)
-      .join('\n');
+    // The =HISTORY= section in buildGeminiContext already tracks asked questions,
+    // so we don't duplicate them here to save ~150-300 tokens per turn.
 
     return `You are a senior ${this.contextManager.getJobProfile()} interviewer at a top tech company. You are conducting a structured interview.
 
@@ -164,8 +187,7 @@ ${mixInstruction}${constraintsBlock}
 - Current status: You have asked ${this.consecutiveFollowUps} consecutive follow-up questions.
 ${this.consecutiveFollowUps >= this.MAX_CONSECUTIVE_FOLLOWUPS ? '- CRITICAL: You have reached the limit of consecutive follow-ups. You MUST ask a NEW question on a DIFFERENT topic now. Set isFollowUp to false, use a new question_id, and change the topic completely.' : '- You may ask a follow-up (set isFollowUp: true) if the candidate\'s answer was vague or incomplete, or move to a new topic (set isFollowUp: false).'}
 - If the candidate skipped the previous question (i.e. =LAST_ANSWER= is "(skipped)"), do NOT ask a follow-up. You MUST move to a completely new topic or question type (set isFollowUp: false).
-- CRITICAL: Never repeat a question or ask about a concept/topic you have already covered. Review the list of already asked main questions:
-${askedQuestionsSummary || 'None yet.'}
+- CRITICAL: Never repeat a question or ask about a concept/topic you have already covered. Check =HISTORY= for previously asked questions.
 - If =LIVE_SIGNALS= shows nervousness/fear, be encouraging ("Take your time, you're doing well.").
 - If speaking too fast (>170 WPM), gently suggest slowing down.
 - If filler density is high (>5%), note it subtly.
@@ -237,8 +259,10 @@ To end the session:
     const context = this.contextManager.buildGeminiContext(liveSignals);
 
     const userMessage = lastAnswerTranscript
-      ? `${context}\n\n=LAST_ANSWER= ${lastAnswerTranscript.slice(0, 800)}\n=SCORES= quality:${lastScores?.quality}/10 sentiment:${lastScores?.sentiment} fillers:${lastScores?.fillerDensity}%`
-      : `${context}\n\nBegin the interview. Greet the candidate by name (from resume) and ask your first question. Make it a warm, specific opening based on their background.`;
+      ? `=LAST_ANSWER= ${lastAnswerTranscript.slice(0, 800)}\n=SCORES= quality:${lastScores?.quality}/10 sentiment:${lastScores?.sentiment} fillers:${lastScores?.fillerDensity}%`
+      : `Begin the interview. Greet the candidate by name (from resume) and ask your first question. Make it a warm, specific opening based on their background.`;
+
+    const fullInstruction = `${this.getSystemPrompt()}\n\nINTERVIEW CONTEXT:\n${context}`;
 
     try {
       const response = await fetch('/api/gemini', {
@@ -247,7 +271,7 @@ To end the session:
         body: JSON.stringify({
           task: 'interview_turn',
           content: userMessage,
-          instruction: this.getSystemPrompt(),
+          instruction: fullInstruction,
         }),
       });
 
@@ -368,5 +392,71 @@ To end the session:
   
   getQuestionCount(): number {
     return this.questionCounter;
+  }
+
+  /**
+   * Get the system prompt and context for the unified /api/agent-turn route.
+   * This lets the interview page call one route that handles scoring + next question.
+   */
+  getPromptAndContext(liveSignals?: LiveSignals): { systemPrompt: string; context: string } {
+    const context = this.contextManager.buildGeminiContext(liveSignals);
+    return {
+      systemPrompt: this.getSystemPrompt(),
+      context,
+    };
+  }
+
+  /**
+   * Process the unified API response and apply agent-side logic
+   * (follow-up tracking, type enforcement, expected points caching).
+   */
+  processUnifiedResponse(nextAction: any): import('@/types').AgentAction {
+    if (!nextAction || nextAction.type === 'end_session') {
+      return {
+        type: 'end_session',
+        reason: nextAction?.reason || 'Session ended',
+        finalImpression: nextAction?.finalImpression || 'Interview complete.',
+      };
+    }
+
+    let enforcedIsFollowUp = nextAction.isFollowUp === true;
+    if (enforcedIsFollowUp && this.consecutiveFollowUps >= this.MAX_CONSECUTIVE_FOLLOWUPS) {
+      enforcedIsFollowUp = false;
+    }
+
+    const enforcedType = !enforcedIsFollowUp
+      ? this.enforceQuestionType(nextAction.questionType)
+      : this.normalizeQuestionType(nextAction.questionType);
+
+    if (nextAction.expectedPoints) {
+      this.currentExpectedPoints = nextAction.expectedPoints;
+    }
+
+    if (enforcedIsFollowUp) {
+      this.consecutiveFollowUps++;
+    } else {
+      this.consecutiveFollowUps = 0;
+      this.questionCounter++;
+    }
+
+    return {
+      type: 'ask_question',
+      question: nextAction.question,
+      question_id: nextAction.question_id || `q_${this.questionCounter}`,
+      questionType: enforcedType,
+      isFollowUp: enforcedIsFollowUp,
+      expectedPoints: nextAction.expectedPoints,
+      testCases: nextAction.testCases,
+      reason: nextAction.reason,
+      topic: nextAction.topic,
+      finalImpression: nextAction.finalImpression,
+    };
+  }
+
+  /** Check if the session should end based on question counts */
+  shouldEndSession(): boolean {
+    const targets = this.getTargets();
+    const unskippedCount = this.contextManager.getUnskippedMainQuestionsCount();
+    return unskippedCount >= targets.total;
   }
 }

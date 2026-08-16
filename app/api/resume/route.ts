@@ -1,10 +1,11 @@
 import prisma from '@/lib/db';
 import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
 
 // Create a new resume
 export async function POST(req: any) {
   try {
-    const session = await getServerSession();
+    const session = await getServerSession(authOptions);
     if (!session || !session.user || !session.user.email) {
       return new Response('Unauthorized', { status: 401 });
     }
@@ -20,8 +21,13 @@ export async function POST(req: any) {
       });
     }
 
-    const body = await req.json();
-    const { name, experience, skills, projects, rawText, rating, suggestions } = body;
+    let body;
+    try {
+      body = await req.json();
+    } catch (e) {
+      return new Response('Invalid JSON', { status: 400 });
+    }
+    const { name, email, education, experience, skills, projects, rawText, rating, suggestions } = body;
 
     // Unset current for other resumes
     await prisma.resume.updateMany({
@@ -34,6 +40,8 @@ export async function POST(req: any) {
       data: {
         userId: user.id,
         name: name || user.name || 'Resume',
+        email: email || null,
+        education: JSON.stringify(education || []),
         experience: JSON.stringify(experience || []),
         skills: JSON.stringify(skills || []),
         projects: JSON.stringify(projects || []),
@@ -54,7 +62,7 @@ export async function POST(req: any) {
 // Get all resumes
 export async function GET() {
   try {
-    const session = await getServerSession();
+    const session = await getServerSession(authOptions);
     if (!session || !session.user || !session.user.email) {
       return new Response('Unauthorized', { status: 401 });
     }
@@ -72,7 +80,8 @@ export async function GET() {
     }
 
     const parsedResumes = user.resumes.map(r => {
-      const safeParse = (str: string, fallback: any) => {
+      const safeParse = (str: string | null, fallback: any) => {
+        if (!str) return fallback;
         try {
           return JSON.parse(str);
         } catch {
@@ -82,6 +91,7 @@ export async function GET() {
 
       return {
         ...r,
+        education: safeParse(r.education, []),
         experience: safeParse(r.experience, []),
         skills: safeParse(r.skills, []),
         projects: safeParse(r.projects, []),
@@ -98,12 +108,17 @@ export async function GET() {
 // Set resume as current
 export async function PUT(req: any) {
   try {
-    const session = await getServerSession();
+    const session = await getServerSession(authOptions);
     if (!session || !session.user || !session.user.email) {
       return new Response('Unauthorized', { status: 401 });
     }
 
-    const body = await req.json();
+    let body;
+    try {
+      body = await req.json();
+    } catch (e) {
+      return new Response('Invalid JSON', { status: 400 });
+    }
     const { id } = body;
 
     const user = await prisma.user.findUnique({
@@ -111,6 +126,12 @@ export async function PUT(req: any) {
     });
 
     if (!user) return new Response('User not found', { status: 404 });
+
+    const existingResume = await prisma.resume.findFirst({
+      where: { id, userId: user.id }
+    });
+
+    if (!existingResume) return new Response('Forbidden', { status: 403 });
 
     await prisma.resume.updateMany({
       where: { userId: user.id },
@@ -125,6 +146,58 @@ export async function PUT(req: any) {
     return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
   } catch (error) {
     console.error('Error updating resume:', error);
+    return new Response('Internal Server Error', { status: 500 });
+  }
+}
+
+// Delete resume
+export async function DELETE(req: any) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session || !session.user || !session.user.email) {
+      return new Response('Unauthorized', { status: 401 });
+    }
+
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get('id');
+
+    if (!id) {
+      return new Response('Resume ID required', { status: 400 });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { email: session.user.email }
+    });
+
+    if (!user) return new Response('User not found', { status: 404 });
+
+    const existingResume = await prisma.resume.findFirst({
+      where: { id, userId: user.id }
+    });
+
+    if (!existingResume) return new Response('Forbidden or Not Found', { status: 403 });
+
+    await prisma.resume.delete({
+      where: { id }
+    });
+
+    // If we deleted the current resume, promote the most recent one
+    if (existingResume.isCurrent) {
+      const mostRecent = await prisma.resume.findFirst({
+        where: { userId: user.id },
+        orderBy: { updatedAt: 'desc' }
+      });
+      if (mostRecent) {
+        await prisma.resume.update({
+          where: { id: mostRecent.id },
+          data: { isCurrent: true }
+        });
+      }
+    }
+
+    return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  } catch (error) {
+    console.error('Error deleting resume:', error);
     return new Response('Internal Server Error', { status: 500 });
   }
 }

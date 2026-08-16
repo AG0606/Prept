@@ -44,7 +44,7 @@ export function ScorePanel() {
   const fillerInfo = getFillerStatus(fillerDensity);
 
   return (
-    <div className="flex flex-col gap-4 p-5 rounded-xl saas-card">
+    <div className="flex flex-col gap-4 p-5 prept-panel">
       <div className="flex items-center justify-between border-b border-border pb-3">
         <h3 className="text-xs font-mono font-bold text-fg-muted uppercase tracking-widest flex items-center gap-2">
           <Activity size={14} className="text-fg-muted" />
@@ -59,7 +59,7 @@ export function ScorePanel() {
 
       <div className="space-y-3">
         {/* Quality Score Indicator */}
-        <div className="flex items-center justify-between p-3 rounded-lg bg-bg border border-border shadow-sm text-sm">
+        <div className="flex items-center justify-between p-3 bg-surface border border-border text-sm">
           <div className="flex items-center gap-2">
             <Zap size={14} className="text-fg-muted" />
             <span className="font-mono text-fg-muted">TURN RATING</span>
@@ -70,7 +70,7 @@ export function ScorePanel() {
         </div>
 
         {/* Real-time Loudness Slider/Indicator */}
-        <div className="p-3 rounded-lg bg-bg border border-border shadow-sm flex flex-col gap-2.5 text-sm">
+        <div className="p-3 bg-surface border border-border flex flex-col gap-2.5 text-sm">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Volume2 size={14} className="text-fg-muted" />
@@ -89,7 +89,7 @@ export function ScorePanel() {
         </div>
 
         {/* Emotion Reading */}
-        <div className="flex items-center justify-between p-3 rounded-lg bg-bg border border-border shadow-sm text-sm">
+        <div className="flex items-center justify-between p-3 bg-surface border border-border text-sm">
           <div className="flex items-center gap-2">
             {emotionIcon[emotion?.dominant ?? 'neutral']}
             <span className="font-mono text-fg-muted">DOMINANT EMOTION</span>
@@ -100,7 +100,7 @@ export function ScorePanel() {
         </div>
 
         {/* Pace (WPM) */}
-        <div className="flex items-center justify-between p-3 rounded-lg bg-bg border border-border shadow-sm text-sm">
+        <div className="flex items-center justify-between p-3 bg-surface border border-border text-sm">
           <div className="flex items-center gap-2">
             <MessageSquare size={14} className="text-fg-muted" />
             <span className="font-mono text-fg-muted">SPEAKING PACE</span>
@@ -111,7 +111,7 @@ export function ScorePanel() {
         </div>
 
         {/* Fillers & Density */}
-        <div className="p-3 rounded-lg bg-bg border border-border shadow-sm flex flex-col gap-2 text-sm">
+        <div className="p-3 bg-surface border border-border flex flex-col gap-2 text-sm">
           <div className="flex items-center justify-between">
             <span className="font-mono text-fg-muted">FILLER DENSITY</span>
             <span className={`font-bold font-mono ${fillerInfo.color}`}>{fillerCount} <span className="text-[10px] text-fg-muted font-normal">words</span></span>
@@ -123,7 +123,7 @@ export function ScorePanel() {
         </div>
 
         {/* Sentiment / Tone */}
-        <div className="flex items-center justify-between p-3 rounded-lg bg-bg border border-border shadow-sm text-sm">
+        <div className="flex items-center justify-between p-3 bg-surface border border-border text-sm">
           <span className="font-mono text-fg-muted">SENTIMENT TONE</span>
           <div className="flex items-center gap-1.5">
             {sentiment === 'positive' ? (
