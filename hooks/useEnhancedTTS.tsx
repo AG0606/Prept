@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useRef } from 'react';
-import { Volume2 } from 'lucide-react';
+import { Volume2, AlertCircle } from 'lucide-react';
 
 const EDGE_TTS_VOICES = [
   { id: 'en-US-AvaMultilingualNeural', name: 'Ava (Natural Female)' },
@@ -11,7 +11,8 @@ const EDGE_TTS_VOICES = [
 ];
 
 export function useEnhancedTTS() {
-  const [selectedVoice, setSelectedVoice] = useState<string>(EDGE_TTS_VOICES[0].id);
+  const [selectedVoice, setSelectedVoice] = useState<string>('en-US-AvaMultilingualNeural');
+  const [ttsWarning, setTtsWarning] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const callIdRef = useRef<number>(0);
 
@@ -30,6 +31,7 @@ export function useEnhancedTTS() {
   }, []);
 
   const fallbackSpeak = useCallback((text: string, onStart?: () => void, onEnd?: () => void) => {
+    setTtsWarning('Primary neural voice service unreachable. Using local speech synthesis (audio fidelity may vary).');
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
       onEnd?.();
       return;
@@ -38,7 +40,7 @@ export function useEnhancedTTS() {
     const utterance = new SpeechSynthesisUtterance(text);
     const voices = window.speechSynthesis.getVoices();
     // Try to find a nice English voice if available locally
-    const preferredVoice = voices.find(v => v.lang.startsWith('en') && (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Microsoft')));
+    const preferredVoice = voices.find(v => v.lang.startsWith('en') && (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Microsoft') || v.name.includes('Samantha')));
     if (preferredVoice) {
       utterance.voice = preferredVoice;
     }
@@ -82,6 +84,7 @@ export function useEnhancedTTS() {
           audio.pause();
           return;
         }
+        setTtsWarning(null);
         onStart?.();
       };
 
@@ -94,7 +97,6 @@ export function useEnhancedTTS() {
 
       audio.onerror = () => {
         URL.revokeObjectURL(url);
-        // Only trigger fallback if this call is still active (e.g. not stopped/skipped)
         if (myCallId === callIdRef.current) {
           fallbackSpeak(text, onStart, onEnd);
         }
@@ -102,7 +104,7 @@ export function useEnhancedTTS() {
 
       await audio.play();
     } catch (e) {
-      console.warn('Edge TTS failed, falling back to local SpeechSynthesis', e);
+      console.warn('Primary TTS failed, using fallback voice:', e);
       if (myCallId === callIdRef.current) {
         fallbackSpeak(text, onStart, onEnd);
       }
@@ -110,16 +112,16 @@ export function useEnhancedTTS() {
   }, [selectedVoice, stop, fallbackSpeak]);
 
   const voiceSelectorUI = (
-    <div className="flex items-center gap-2">
-      <Volume2 size={16} className="text-gray-400" />
+    <div className="flex items-center gap-2 bg-surface px-2.5 py-1 border border-border">
+      <Volume2 size={15} className="text-accent shrink-0" />
       <select 
         value={selectedVoice} 
         onChange={(e) => setSelectedVoice(e.target.value)}
-        className="bg-transparent text-sm text-gray-300 font-medium outline-none border-none cursor-pointer max-w-[150px] truncate"
-        title="Select AI Voice"
+        className="bg-surface text-xs font-mono font-bold text-fg outline-none border-none cursor-pointer max-w-[170px] truncate"
+        title="Select AI Interviewer Voice"
       >
         {EDGE_TTS_VOICES.map(v => (
-          <option key={v.id} value={v.id} className="bg-[#1e1e1e] text-white">
+          <option key={v.id} value={v.id} className="bg-surface text-fg font-mono text-xs">
             {v.name}
           </option>
         ))}
@@ -127,5 +129,6 @@ export function useEnhancedTTS() {
     </div>
   );
 
-  return { speak, stop, voiceSelectorUI };
+  return { speak, stop, voiceSelectorUI, ttsWarning };
 }
+

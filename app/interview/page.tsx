@@ -63,7 +63,8 @@ export default function InterviewPage() {
   const [isEnding, setIsEnding] = useState(false);
   const [vadCountdown, setVadCountdown] = useState<number | null>(null);
   
-  const { speak, stop, voiceSelectorUI } = useEnhancedTTS();
+  const [sessionStarted, setSessionStarted] = useState(false);
+  const { speak, stop, voiceSelectorUI, ttsWarning } = useEnhancedTTS();
   const { startRecording, stopRecording, cancelRecording } = useAudioRecorder();
   const isSubmittingRef = useRef(false);
   const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -144,11 +145,6 @@ export default function InterviewPage() {
         });
     }
 
-    if (!hasStartedRef.current) {
-      hasStartedRef.current = true;
-      getNextQuestion();
-    }
-
     return () => {
       if (videoElementStream) {
         videoElementStream.getTracks().forEach((t) => t.stop());
@@ -156,6 +152,12 @@ export default function InterviewPage() {
       stop();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleStartSession = useCallback(() => {
+    setSessionStarted(true);
+    hasStartedRef.current = true;
+    getNextQuestion();
   }, []);
 
   // Sync client microphone recording with global listening state
@@ -527,6 +529,58 @@ export default function InterviewPage() {
 
       {/* Main Container */}
       <div className="flex flex-grow min-h-0 overflow-hidden relative">
+        {/* Pre-Flight Calibration Room Overlay */}
+        {!sessionStarted && (
+          <div className="absolute inset-0 bg-bg/95 backdrop-blur-sm z-50 flex items-center justify-center p-6 select-none">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="prept-card p-8 max-w-lg w-full border-2 border-border shadow-2xl space-y-6"
+            >
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="prept-label">Pre-Flight Calibration</span>
+                  <span className="px-2 py-0.5 bg-accent-muted text-accent text-[10px] font-mono font-bold uppercase">
+                    Ready
+                  </span>
+                </div>
+                <h2 className="text-2xl font-extrabold tracking-tight text-fg">
+                  Ready to Enter Interview Room
+                </h2>
+                <p className="text-xs text-fg-muted mt-1 leading-relaxed">
+                  Candidate: <strong className="text-fg">{store.resumeData?.name || 'Engineer'}</strong> | Role: <strong className="text-fg">{store.jobProfile}</strong>
+                </p>
+              </div>
+
+              <div className="p-4 bg-surface border border-border-soft space-y-2.5 font-mono text-xs">
+                <div className="flex items-center justify-between text-fg">
+                  <span className="text-fg-muted">Interviewer Persona:</span>
+                  <span className="font-bold uppercase text-accent">{store.interviewerPersona || 'Standard'}</span>
+                </div>
+                <div className="flex items-center justify-between text-fg">
+                  <span className="text-fg-muted">Primary Voice Engine:</span>
+                  <span className="font-bold text-success">Ava (Natural Neural)</span>
+                </div>
+                <div className="flex items-center justify-between text-fg">
+                  <span className="text-fg-muted">Simulation Mode:</span>
+                  <span className="font-bold uppercase">{store.mode === 'real' ? 'Real Assessment' : 'Practice Sandbox'}</span>
+                </div>
+                <div className="flex items-center justify-between text-fg">
+                  <span className="text-fg-muted">VAD Auto-Listen:</span>
+                  <span className="font-bold text-accent">{store.vadEnabled ? 'Enabled' : 'Disabled'}</span>
+                </div>
+              </div>
+
+              <button
+                onClick={handleStartSession}
+                className="prept-btn-gradient w-full h-14 justify-center text-sm font-bold uppercase tracking-wider"
+              >
+                Enter Interview Room & Begin
+              </button>
+            </motion.div>
+          </div>
+        )}
+
         {/* PANE 1: Left Live Telemetry Column */}
         <div className="w-[320px] shrink-0 bg-surface border-r border-border p-6 overflow-y-auto scrollbar-custom flex flex-col gap-6 z-10">
           <div className="flex flex-col gap-3">
@@ -574,6 +628,14 @@ export default function InterviewPage() {
 
         {/* PANE 2: Center Workspace */}
         <div className="flex-grow min-w-0 flex flex-col h-full overflow-hidden bg-bg">
+          {/* TTS Fallback Warning Banner */}
+          {ttsWarning && (
+            <div className="bg-warn/10 border-b border-warn/30 px-6 py-2 text-xs font-mono text-warn flex items-center justify-between shrink-0">
+              <span className="flex items-center gap-2">
+                <span>⚠️</span> {ttsWarning}
+              </span>
+            </div>
+          )}
           
           {/* Question Banner */}
           <div className="bg-surface border-b border-border p-6 shrink-0">
