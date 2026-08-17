@@ -61,6 +61,16 @@ export default function DashboardPage() {
   const [isAnalyzingJd, setIsAnalyzingJd] = useState(false);
 
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = params.get('tab');
+      if (tabParam === 'resumes' || tabParam === 'history' || tabParam === 'home') {
+        setActiveTab(tabParam);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
     if (status === 'unauthenticated') {
       router.push('/');
     }
@@ -95,6 +105,47 @@ export default function DashboardPage() {
   useEffect(() => {
     fetchDashboardData();
   }, [fetchDashboardData]);
+
+  const handleCreateDemoResume = async () => {
+    try {
+      const samplePayload = {
+        name: 'Senior Full Stack Engineer (Sample)',
+        email: session?.user?.email || 'candidate@prept.internal',
+        education: [{ degree: 'B.S. Computer Science', institution: 'University of Technology', year: '2022' }],
+        experience: [{
+          company: 'HyperScale Systems',
+          role: 'Senior Software Engineer',
+          duration: '2022 - Present',
+          bulletPoints: [
+            'Architected distributed event-driven microservices processing 50k req/sec.',
+            'Optimized p99 query latency by 45% using Redis caching and Postgres partition indexing.',
+            'Led migration to Next.js 14 App Router and TypeScript codebase.'
+          ]
+        }],
+        skills: ['TypeScript', 'Next.js', 'React', 'Node.js', 'PostgreSQL', 'Redis', 'Docker', 'System Design', 'TailwindCSS'],
+        projects: [{
+          name: 'Distributed Rate Limiter',
+          description: 'Token-bucket rate limiter built with Go and Redis clusters.',
+          techStack: ['Go', 'Redis', 'Docker']
+        }],
+        rawText: 'Senior Software Engineer specializing in distributed architectures and web applications.',
+        rating: 8.8,
+        suggestions: 'Quantify metrics on team leadership and scaling impact.',
+      };
+
+      const res = await fetch('/api/resume', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(samplePayload),
+      });
+
+      if (res.ok) {
+        await fetchDashboardData();
+      }
+    } catch (err) {
+      console.error('Failed to create demo resume:', err);
+    }
+  };
 
   const handleAnalyzeJd = async () => {
     if (!jobDescription || jobDescription.trim().length < 20 || !resumeData) return;
@@ -292,6 +343,44 @@ export default function DashboardPage() {
 
                 <div className="prept-card p-8">
                   <div className="space-y-8">
+                    {/* Guided Profile Prompt if No Active Resume */}
+                    {!resumeData && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -5 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="p-5 border-2 border-dashed border-accent bg-accent/5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
+                      >
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2 text-accent font-bold text-sm">
+                            <AlertTriangle size={16} />
+                            <span>Step 1: Upload or Select Candidate Resume</span>
+                          </div>
+                          <p className="text-xs text-fg-muted leading-relaxed max-w-xl">
+                            To customize interview questions to your background and target competency gaps, an active resume profile is required. Upload your PDF in Assets or launch immediately with a pre-configured sample profile.
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveTab('resumes');
+                              setIsUploading(true);
+                            }}
+                            className="prept-btn-primary text-xs font-bold whitespace-nowrap"
+                          >
+                            <Plus size={14} /> Upload Resume (PDF)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleCreateDemoResume}
+                            className="px-3 py-2 bg-surface border border-accent text-accent hover:bg-accent-muted text-xs font-mono font-bold whitespace-nowrap"
+                          >
+                            ⚡ Use Sample Profile
+                          </button>
+                        </div>
+                      </motion.div>
+                    )}
+
                     {/* Role */}
                     <div>
                       <p className="text-sm font-bold text-fg mb-3">1. Target Role</p>
@@ -486,7 +575,9 @@ export default function DashboardPage() {
                       className="prept-btn-gradient w-full h-12 justify-center text-base mt-4 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <Play size={18} className="fill-current" />
-                      Initiate {mode === 'real' ? 'Interview' : 'Practice'} Room
+                      {!resumeData
+                        ? 'Upload or Select a Resume in Assets to Start'
+                        : `Initiate ${mode === 'real' ? 'Interview' : 'Practice'} Room`}
                     </button>
                   </div>
                 </div>
@@ -502,9 +593,14 @@ export default function DashboardPage() {
                   <p className="prept-label mb-2">Asset Gallery</p>
                   <h2 className="text-2xl font-extrabold tracking-tight">Resume Profiles</h2>
                 </div>
-                <button onClick={() => setIsUploading(!isUploading)} className="prept-btn-secondary">
-                  <Plus size={16} /> Upload New
-                </button>
+                <div className="flex items-center gap-3">
+                  <button onClick={handleCreateDemoResume} className="px-3 py-2 bg-surface border border-accent text-accent hover:bg-accent-muted text-xs font-mono font-bold">
+                    ⚡ Add Sample Profile
+                  </button>
+                  <button onClick={() => setIsUploading(!isUploading)} className="prept-btn-secondary">
+                    <Plus size={16} /> Upload New PDF
+                  </button>
+                </div>
               </div>
 
               {isUploading && (
@@ -532,59 +628,89 @@ export default function DashboardPage() {
                   
                   const skills = Array.isArray(res.skills) ? res.skills : typeof res.skills === 'string' ? JSON.parse(res.skills) : [];
                   const topSkills = skills.slice(0, 5);
+                  const isCurrent = !!res.isCurrent;
 
                   return (
                     <div 
                       key={res.id} 
                       onClick={() => setSelectedResume(res)}
-                      className={`prept-bento-card p-6 transition-all cursor-pointer hover:border-fg-muted ${res.isCurrent ? 'ring-2 ring-accent shadow-md' : ''}`}
+                      className={`prept-bento-card p-6 transition-all cursor-pointer relative flex flex-col justify-between ${
+                        isCurrent
+                          ? 'border-2 border-accent bg-accent/[0.04] shadow-lg ring-2 ring-accent/30'
+                          : 'border border-border hover:border-fg-muted bg-surface'
+                      }`}
                     >
-                      <div className="flex justify-between items-start mb-4">
-                        <div className="prept-icon-badge w-10 h-10 rounded-lg flex items-center justify-center">
-                          <FileText size={20} />
-                        </div>
-                        {rating > 0 && (
-                          <span className={`px-2.5 py-1 text-xs font-mono font-bold ${ratingBg} ${ratingColor} border border-current/20`}>
-                            ★ {rating}/10
-                          </span>
-                        )}
-                      </div>
-                      
-                      <h3 className="font-bold text-lg mb-1 line-clamp-1">{res.name}</h3>
-                      <p className="text-xs text-fg-muted font-mono mb-4">{new Date(res.updatedAt).toLocaleDateString()}</p>
-                      
-                      {topSkills.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5 mb-4">
-                          {topSkills.map((sk: string, i: number) => (
-                            <span key={i} className="px-2 py-0.5 bg-accent-muted text-accent text-[11px] font-mono border border-accent/20">
-                              {sk}
-                            </span>
-                          ))}
-                          {skills.length > 5 && (
-                            <span className="px-2 py-0.5 bg-surface-warm text-fg-muted text-[10px] font-mono border border-border">
-                              +{skills.length - 5}
+                      <div>
+                        {/* Status Header Badge */}
+                        <div className="flex justify-between items-start mb-4">
+                          <div className="flex items-center gap-3">
+                            <div className={`prept-icon-badge w-10 h-10 rounded-lg flex items-center justify-center ${isCurrent ? 'bg-accent text-accent-on' : ''}`}>
+                              <FileText size={20} />
+                            </div>
+                            {isCurrent ? (
+                              <span className="px-2.5 py-0.5 bg-accent text-accent-on text-[10px] font-mono font-bold uppercase tracking-wider flex items-center gap-1.5 shadow-sm">
+                                <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                                ACTIVE PROFILE
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 bg-surface-warm text-fg-muted text-[10px] font-mono border border-border uppercase">
+                                STANDBY
+                              </span>
+                            )}
+                          </div>
+
+                          {rating > 0 && (
+                            <span className={`px-2.5 py-1 text-xs font-mono font-bold ${ratingBg} ${ratingColor} border border-current/20`}>
+                              ★ {rating}/10
                             </span>
                           )}
                         </div>
-                      )}
+                        
+                        <h3 className="font-bold text-lg mb-0.5 line-clamp-1 text-fg">{res.name}</h3>
+                        <p className="text-[11px] text-fg-muted font-mono mb-4">
+                          {isCurrent ? 'Active for all interview sessions' : `Updated ${new Date(res.updatedAt).toLocaleDateString()}`}
+                        </p>
+                        
+                        {topSkills.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 mb-4">
+                            {topSkills.map((sk: string, i: number) => (
+                              <span key={i} className="px-2 py-0.5 bg-accent-muted text-accent text-[11px] font-mono border border-accent/20">
+                                {sk}
+                              </span>
+                            ))}
+                            {skills.length > 5 && (
+                              <span className="px-2 py-0.5 bg-surface-warm text-fg-muted text-[10px] font-mono border border-border">
+                                +{skills.length - 5}
+                              </span>
+                            )}
+                          </div>
+                        )}
 
-                      {res.suggestions && (
-                        <div className="text-sm text-fg-muted mb-6 bg-surface-warm rounded-lg p-3 border border-border-soft line-clamp-3">
-                          {res.suggestions}
-                        </div>
-                      )}
+                        {res.suggestions && (
+                          <div className="text-xs text-fg-muted mb-4 bg-surface-warm rounded-lg p-3 border border-border-soft line-clamp-2">
+                            {res.suggestions}
+                          </div>
+                        )}
+                      </div>
 
-                      {!res.isCurrent && (
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleSetCurrentResume(res.id);
-                          }} 
-                          className="w-full prept-btn-secondary justify-center text-xs"
-                        >
-                          Set as Active
-                        </button>
-                      )}
+                      {/* Action Footer */}
+                      <div className="mt-4 pt-3 border-t border-border-soft">
+                        {isCurrent ? (
+                          <div className="w-full py-2 bg-accent-muted/60 text-accent border border-accent/30 text-center text-xs font-mono font-bold flex items-center justify-center gap-2">
+                            <Check size={14} /> Profile In Use
+                          </div>
+                        ) : (
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleSetCurrentResume(res.id);
+                            }} 
+                            className="w-full prept-btn-primary justify-center text-xs font-bold py-2.5"
+                          >
+                            Set as Active Profile
+                          </button>
+                        )}
+                      </div>
                     </div>
                   );
                 })}

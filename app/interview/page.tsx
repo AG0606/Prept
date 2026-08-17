@@ -69,6 +69,9 @@ export default function InterviewPage() {
   const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
+  const [cameraActive, setCameraActive] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+
   useEffect(() => {
     if (!store.resumeData || !store.jobProfile) {
       router.push('/');
@@ -121,16 +124,25 @@ export default function InterviewPage() {
         .catch(err => console.warn('Failed to load cached resume questions:', err));
     }
 
-    let videoElement: HTMLVideoElement | null = null;
-    navigator.mediaDevices
-      .getUserMedia({ video: true, audio: false })
-      .then((stream) => {
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          videoElement = videoRef.current;
-        }
-      })
-      .catch((err) => console.error('Camera error:', err));
+    let videoElementStream: MediaStream | null = null;
+    if (navigator?.mediaDevices?.getUserMedia) {
+      navigator.mediaDevices
+        .getUserMedia({ video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' }, audio: false })
+        .then((stream) => {
+          videoElementStream = stream;
+          if (videoRef.current) {
+            videoRef.current.srcObject = stream;
+            videoRef.current.onloadedmetadata = () => {
+              videoRef.current?.play().catch(e => console.warn('Video playback notice:', e));
+            };
+            setCameraActive(true);
+          }
+        })
+        .catch((err) => {
+          console.warn('Camera access not granted:', err);
+          setCameraError('Camera disabled (Audio telemetry running)');
+        });
+    }
 
     if (!hasStartedRef.current) {
       hasStartedRef.current = true;
@@ -138,8 +150,8 @@ export default function InterviewPage() {
     }
 
     return () => {
-      if (videoElement?.srcObject) {
-        (videoElement.srcObject as MediaStream).getTracks().forEach((t) => t.stop());
+      if (videoElementStream) {
+        videoElementStream.getTracks().forEach((t) => t.stop());
       }
       stop();
     };
@@ -518,19 +530,32 @@ export default function InterviewPage() {
         {/* PANE 1: Left Live Telemetry Column */}
         <div className="w-[320px] shrink-0 bg-surface border-r border-border p-6 overflow-y-auto scrollbar-custom flex flex-col gap-6 z-10">
           <div className="flex flex-col gap-3">
-            <h3 className="prept-label">Webcam Monitor</h3>
-            <div className="relative aspect-video bg-surface-warm border border-border overflow-hidden">
+            <div className="flex items-center justify-between">
+              <h3 className="prept-label">Webcam Monitor</h3>
+              <span className="flex items-center gap-1.5 text-[10px] font-mono text-fg-muted">
+                <span className={`w-2 h-2 rounded-full ${cameraActive ? 'bg-success animate-pulse' : cameraError ? 'bg-danger' : 'bg-warn'}`} />
+                {cameraActive ? 'LIVE' : cameraError ? 'DISABLED' : 'INIT'}
+              </span>
+            </div>
+            <div className="relative aspect-video bg-surface-warm border border-border overflow-hidden flex items-center justify-center">
               <video
                 ref={videoRef}
                 autoPlay
                 playsInline
                 muted
-                className="w-full h-full object-cover grayscale contrast-125"
+                className="w-full h-full object-cover transform -scale-x-100"
               />
               <EmotionOverlay videoRef={videoRef} />
               <div className="absolute top-2 left-2 px-2 py-0.5 bg-bg/80 border border-border text-[9px] font-mono text-fg-muted">
                 CAM_01 // 30FPS
               </div>
+              {!cameraActive && (
+                <div className="absolute inset-0 bg-surface flex flex-col items-center justify-center p-4 text-center">
+                  <span className="text-xs font-mono text-fg-muted">
+                    {cameraError || 'Connecting Camera...'}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
 
