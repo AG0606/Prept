@@ -1,92 +1,132 @@
-<div align="center">
-  <img src="public/logo.png" alt="Prept Logo" width="120" />
-  <h1>Prept</h1>
-  <p><strong>The High-Fidelity AI Interview Simulation Platform</strong></p>
-  <p><em>Train for your next career move in an adaptive, high-pressure, architecturally rigorous environment.</em></p>
-</div>
+# Prept // AI Interview Preparation Platform
+
+Prept is an intelligent, low-latency, and cost-optimized AI interview simulation platform. It bridges the gap between passive algorithmic practice and high-stakes technical communication through dynamic resume deep-dives, real-time vocal and emotional telemetry, structured behavioral and technical tracks, and comprehensive post-session evaluation reports.
 
 ---
 
-## 🚀 What is Prept?
+## Live Deployment & Preview
 
-**Prept** is not just another list of coding questions. It is a highly interactive, real-time interview simulator designed specifically for top-tier engineering candidates (FAANG level). It bridges the gap between practicing algorithms in isolation and actually communicating them effectively under pressure.
-
-Through adaptive AI, live voice interactions, real-time code execution, and deep performance analytics, Prept mimics the intensity and dynamic nature of a real technical interview. 
-
----
-
-## ⚡ The Core Experience
-
-### 1. Live Interactive Coding
-A built-in Monaco Editor allows you to write, execute, and debug code directly in the browser. The system validates your logic in real-time, just like a real coding environment.
-
-### 2. Adaptive AI Voice & Conversational Dynamics
-The interview isn't static text. An advanced AI voice engine listens to your explanations, analyzes your filler words ("um", "uh"), and dynamically interrupts you to ask architectural follow-up questions or push for complexity optimizations (e.g., "Can we achieve this in O(log N) instead?").
-
-### 3. Resume-Driven System Design
-Upload your PDF resume and the platform parses your specific background. It tailors high-level system design questions (e.g., load balancing, sharding, distributed caching) based on the technologies and scale you've previously worked with.
-
-### 4. Behavioral & STAR Framework Mastery
-The AI conducts deep behavioral interviews, probing for leadership principles and ensuring your answers follow the strict Situation-Task-Action-Result (STAR) methodology.
-
-### 5. Deep Post-Interview Analytics
-After every session, you receive a comprehensive "Actionable Feedback Report". This includes:
-- Dimensional scores on **Communication**, **Technical Depth**, and **Confidence**.
-- A timeline of your interview with diff-style refactor suggestions.
-- Emotion tracking and filler word counts to improve verbal clarity.
+* **Production URL**: [https://prept-coach.vercel.app](https://prept-coach.vercel.app)
+* **GitHub Repository**: [https://github.com/AG0606/Prept](https://github.com/AG0606/Prept)
+* **Release Version**: `v1.0.0`
 
 ---
 
-## 📐 The Brutalist Blueprint Design System
+## Core Capabilities
 
-Prept is built with a custom design language called the **Brutalist Blueprint**.
-- **Focus over Flash**: We eliminated soft gradients, rounded corners, and drop shadows. 
-- **Architectural Aesthetic**: The UI relies on sharp 1px borders, high-contrast monochrome layouts, monospace typography, and a distinct indigo accent (`#5B5BFF`).
-- **Living Systems**: The interface feels like a technical HUD. Features like the falling Tetris foundation blocks, bouncing audio wave visualizers, and blueprint grid backgrounds reinforce the engineering mindset.
+### 1. Resume Deep-Dive & Question Caching
+* **Structured PDF Parsing**: Extracts work experience, technical competencies, education, and open source projects from uploaded candidate resumes.
+* **Instant Extraction HUD**: Real-time evaluation rating badge, top skill chips, and actionable highlight recommendations immediately after upload.
+* **Persistent Question Bank (`/api/resume-questions`)**: Pre-generates 5 to 8 deep-probing questions per resume and target role. These questions are cached in SQLite/Prisma to eliminate redundant LLM generation calls across repeat practice sessions.
+
+### 2. Low-Token Unified Agent Orchestrator (`/api/agent-turn`)
+* **Single-Inference Turn Architecture**: Merges candidate response scoring, sentiment analysis, and next question generation into 1 single LLM call per turn.
+* **Cost & Latency Reduction**: Reduces per-turn external API calls from 5 to 3 (`transcribe` -> `agent-turn` -> `tts`), cutting token consumption by ~40% and response latency by ~50%.
+* **Zero-Cost Local Telemetry**: Speech pace (WPM), audio loudness (dB), and filler word densities are processed locally in real time via the Web Audio API and Web Speech API.
+
+### 3. Multi-Tier Dynamic Load Balancer (`lib/loadBalancer.ts`)
+* **Automated Rate Tracking**: Monitors rolling requests-per-minute (RPM) and requests-per-day (RPD) across providers.
+* **Intelligent Failover**: Prioritizes Groq Cloud (`llama-3.3-70b-versatile`) for sub-second responses, seamlessly falling back to Google Gemini (`gemini-flash-latest`) when approaching quotas or during upstream service spikes.
+
+### 4. Real-Time Telemetry & Facial Expression HUD
+* **Vocal Pace & Volume Tracking**: Visual audio waveform and speaking rate indicators updated every 500ms.
+* **Facial Emotion Recognition**: Browser-native webcam tracking powered by `face-api.js` to detect composure, engagement, and confidence.
+* **STAR Framework Alignment**: Real-time evaluation of Situation, Task, Action, and Result structured communication.
+
+### 5. Actionable Post-Session Evaluation Reports
+* **Comprehensive Performance Breakdown**: Overall score, turn-by-turn question summaries, key strengths, gap analysis, and tailored recommendations.
+* **Historical Tracking**: Stores completed sessions in the database for candidate progress analysis over time.
 
 ---
 
-## 🛠️ Architecture & Technologies
+## System Architecture & Tech Stack
 
-Prept is a modern full-stack web application built for speed and AI integration.
-
-- **Frontend Core**: [Next.js 14](https://nextjs.org/) (App Router), React, TypeScript
-- **State Management**: Zustand
-- **Styling**: Tailwind CSS & Vanilla CSS (for complex keyframe animations)
-- **Code Editor**: Monaco Editor (`@monaco-editor/react`)
-- **Voice & Audio**: Web Speech API, Web Audio API, `lucide-react` for iconography
-- **Database**: Prisma ORM (SQLite / PostgreSQL)
-- **AI Integrations**: Gemini API (for logic, adaptive questioning, and feedback parsing)
+| Layer | Technologies |
+| :--- | :--- |
+| **Frontend Core** | Next.js 14 (App Router), React 18, TypeScript |
+| **Styling & Theme** | Tailwind CSS, CSS Custom Properties (Strict Brutalist Design System), Framer Motion |
+| **AI Orchestration** | Groq Cloud (`llama-3.3-70b-versatile`), Google Gemini (`gemini-flash-latest`) |
+| **Speech-to-Text (STT)** | Groq Cloud Hosted Whisper (`whisper-large-v3`), Web Speech API fallback |
+| **Text-to-Speech (TTS)** | Microsoft Edge Neural TTS (`node-edge-tts`), SpeechSynthesis fallback |
+| **Computer Vision** | `face-api.js` (Client-side TensorFlow models) |
+| **Database & Auth** | Prisma ORM (SQLite / PostgreSQL), NextAuth.js (Google OAuth & Demo Credentials) |
 
 ---
 
-## 💻 Local Development Setup
+## Design System: The Brutalist Blueprint
 
-To get this project running on your local machine:
+Prept adheres to a functional, high-contrast engineering aesthetic:
+* **Zero Radius**: `0px` border-radius across all containers, cards, inputs, and modals.
+* **Curated Palette**: Monochrome surface layers with high-contrast text and a distinct technical accent (`#5B5BFF`).
+* **Monospace Data Display**: Telemetry readouts, metrics, and question IDs rendered in clean monospace typography.
+* **No Arbitrary Decorations**: Visual elements serve strict functional utility without decorative gradients or unnecessary icon clutter.
 
-**1. Clone the repository**
+---
+
+## Repository Branches
+
+* **`main`**: Production edition focused on Technical and Behavioral/HR interview tracks without code editor dependencies (deployed on Vercel).
+* **`with-coding`**: Preserved feature branch containing the in-browser JavaScript/TypeScript Code Playground (`CodePlayground.tsx`), sandbox test-case runner, and 3-way distribution controls.
+
+---
+
+## Getting Started (Local Development)
+
+### 1. Clone the Repository
 ```bash
 git clone https://github.com/AG0606/Prept.git
 cd Prept
 ```
 
-**2. Install dependencies**
+### 2. Install Dependencies
 ```bash
 npm install
 ```
 
-**3. Set up environment variables**
-Create a `.env` file in the root directory and add your API keys (e.g., Gemini API key, Auth secrets). *See `.env.example` if available.*
+### 3. Configure Environment Variables
+Create a `.env` file in the root directory (refer to `.env.example`):
+```env
+# Google Gemini API Key
+GEMINI_API_KEY="your_gemini_api_key"
 
-**4. Run the development server**
+# Groq Cloud API Key (Llama 3.3 & Whisper STT)
+GROQ_API_KEY="your_groq_api_key"
+
+# NextAuth Configuration
+NEXTAUTH_SECRET="your_32_character_secret_key"
+NEXTAUTH_URL="http://localhost:3000"
+
+# Database Configuration
+DATABASE_URL="file:./prisma/dev.db"
+
+# Optional: Google OAuth 2.0 (For 1-click Google Sign-In)
+GOOGLE_CLIENT_ID="your_google_client_id"
+GOOGLE_CLIENT_SECRET="your_google_client_secret"
+```
+
+### 4. Initialize Database
+```bash
+npx prisma db push
+```
+
+### 5. Start Development Server
 ```bash
 npm run dev
 ```
 
-**5. Start Training**
-Open [http://localhost:3000](http://localhost:3000) in your browser and start your first simulation!
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ---
-<div align="center">
-  <em>© Prept Systems // Built for Engineers, by Engineers</em>
-</div>
+
+## Production Deployment (Vercel)
+
+1. Push your changes to GitHub.
+2. Import the repository on [Vercel](https://vercel.com).
+3. Set your production Environment Variables (`GEMINI_API_KEY`, `GROQ_API_KEY`, `NEXTAUTH_SECRET`, `NEXTAUTH_URL`, `DATABASE_URL`).
+4. Vercel automatically runs `prisma generate && prisma db push --accept-data-loss && next build` and deploys your application.
+
+---
+
+## License
+
+Built for engineers, by engineers. Released under the MIT License.
