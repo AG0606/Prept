@@ -40,18 +40,19 @@ export default function LandingPage() {
               <a href="#pricing" className="hover:text-accent transition-colors">Pricing</a>
             </div>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
             <button
-              onClick={() => signIn('google', { callbackUrl: '/dashboard' })}
-              className="text-sm font-medium hover:text-accent transition-colors hidden md:block"
+              onClick={() => signIn('credentials', { username: 'preview_candidate', callbackUrl: '/dashboard' })}
+              className="text-xs font-mono font-bold px-3 py-1.5 border border-accent text-accent bg-accent-muted/20 hover:bg-accent-muted transition-colors"
+              title="1-Click Guest Access for Vercel Preview Deployments"
             >
-              Sign In
+              ⚡ Preview Demo Access
             </button>
             <button
               onClick={() => signIn('google', { callbackUrl: '/dashboard' })}
-              className="prept-btn-primary"
+              className="prept-btn-primary text-xs"
             >
-              Get Started
+              Sign In (Google)
             </button>
           </div>
         </div>
@@ -63,7 +64,7 @@ export default function LandingPage() {
           <div className="max-w-3xl flex flex-col items-start">
             <div className="inline-flex items-center gap-3 border border-border px-4 py-2 mb-12 bg-surface text-sm font-medium">
               <span className="w-2 h-2 bg-accent rounded-none" />
-              V2 Architecture Live
+              Advanced Suite V2 Live
             </div>
 
             <h1 className="text-6xl md:text-8xl lg:text-[96px] font-medium tracking-tight leading-[0.95] mb-12">
@@ -71,19 +72,22 @@ export default function LandingPage() {
             </h1>
 
             <p className="text-xl md:text-2xl text-fg-muted max-w-2xl mb-16 font-normal leading-relaxed">
-              Train for your next career move in a high-fidelity, adaptive environment. Real-time feedback, live code execution, and deep performance analytics built for top engineers.
+              Train for your next career move in a high-fidelity, adaptive environment. Real-time feedback, JD gap analysis, interviewer personas, and executive scorecards.
             </p>
 
             <div className="flex flex-col sm:flex-row gap-4">
               <button
-                onClick={() => signIn('google', { callbackUrl: '/dashboard' })}
-                className="prept-btn-gradient"
+                onClick={() => signIn('credentials', { username: 'preview_candidate', callbackUrl: '/dashboard' })}
+                className="prept-btn-gradient flex items-center justify-center gap-2"
               >
-                Start Practicing Free
-                <ArrowRight size={18} className="ml-2" />
+                Instant Preview Access
+                <ArrowRight size={18} />
               </button>
-              <button className="prept-btn-secondary">
-                View Documentation
+              <button
+                onClick={() => signIn('google', { callbackUrl: '/dashboard' })}
+                className="prept-btn-secondary"
+              >
+                Sign In with Google
               </button>
             </div>
           </div>
@@ -146,12 +150,20 @@ export default function LandingPage() {
         <h2 className="text-5xl md:text-7xl font-medium tracking-tight mb-12">
           Secure the offer.
         </h2>
-        <button
-          onClick={() => signIn('google', { callbackUrl: '/dashboard' })}
-          className="prept-btn-primary px-12 py-5 text-lg"
-        >
-          Initialize Session
-        </button>
+        <div className="flex flex-col sm:flex-row gap-4">
+          <button
+            onClick={() => signIn('credentials', { username: 'preview_candidate', callbackUrl: '/dashboard' })}
+            className="prept-btn-primary px-10 py-4 text-base"
+          >
+            ⚡ Launch Preview Session
+          </button>
+          <button
+            onClick={() => signIn('google', { callbackUrl: '/dashboard' })}
+            className="prept-btn-secondary px-10 py-4 text-base"
+          >
+            Sign In with Google
+          </button>
+        </div>
       </section>
 
       {/* Footer */}

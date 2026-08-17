@@ -79,6 +79,25 @@ export async function GET() {
       });
     }
 
+    if (user.resumes.length === 0) {
+      const demoResume = await prisma.resume.create({
+        data: {
+          userId: user.id,
+          name: `${user.name || 'Senior Engineer'} Profile`,
+          email: user.email,
+          education: JSON.stringify([{ degree: 'B.S. Computer Science', institution: 'University of Technology', year: '2022' }]),
+          experience: JSON.stringify([{ company: 'ScaleTech Inc.', role: 'Full Stack Engineer', duration: '2022 - Present', bulletPoints: ['Architected distributed event-driven microservices processing 50k req/sec.', 'Reduced p99 query latency by 45% using Redis caching and Postgres indexing.'] }]),
+          skills: JSON.stringify(['TypeScript', 'Next.js', 'React', 'Node.js', 'PostgreSQL', 'Redis', 'Docker', 'System Design', 'TailwindCSS']),
+          projects: JSON.stringify([{ name: 'Distributed Rate Limiter', description: 'Token-bucket rate limiter built with Go and Redis clusters.', techStack: ['Go', 'Redis', 'Docker'] }]),
+          rawText: 'Full Stack Engineer with 3+ years experience in distributed systems and modern web applications.',
+          rating: 8.8,
+          suggestions: 'Consider quantifying business impact metrics on the distributed rate limiter project.',
+          isCurrent: true,
+        }
+      });
+      user.resumes = [demoResume];
+    }
+
     const parsedResumes = user.resumes.map(r => {
       const safeParse = (str: string | null, fallback: any) => {
         if (!str) return fallback;
