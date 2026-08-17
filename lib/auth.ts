@@ -22,18 +22,26 @@ export const authOptions: NextAuthOptions = {
       async authorize(credentials) {
         if (!credentials?.username) return null;
         const email = `demo+${credentials.username}@lumen.internal`;
-        let user = await prisma.user.findUnique({ where: { email } });
-        if (!user) {
-          user = await prisma.user.create({
-            data: { name: credentials.username, email: email },
-          });
+        try {
+          let user = await prisma.user.findUnique({ where: { email } });
+          if (!user) {
+            user = await prisma.user.create({
+              data: { name: credentials.username, email: email },
+            });
+          }
+          return user;
+        } catch (err) {
+          console.error("Authorize db fallback:", err);
+          return { id: `demo_${credentials.username}`, name: credentials.username, email };
         }
-        return user;
       },
     }),
   ],
   session: { strategy: "jwt" },
   callbacks: {
+    async signIn({ user, account, profile }) {
+      return true;
+    },
     async jwt({ token, user }) {
       if (user) {
         token.sub = user.id;
