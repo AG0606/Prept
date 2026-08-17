@@ -9,6 +9,10 @@ interface InterviewState {
   // Session metadata
   sessionId: string;
   jobProfile: string;
+  jobDescription: string;
+  interviewerPersona: import('@/types').InterviewerPersona;
+  gapAnalysis: import('@/types').GapAnalysisResult | null;
+  vadEnabled: boolean;
   resumeData: ResumeData | null;
   isActive: boolean;
   phase: InterviewPhase;
@@ -46,6 +50,10 @@ interface InterviewState {
 
   // Actions
   setJobProfile: (jp: string) => void;
+  setJobDescription: (jd: string) => void;
+  setInterviewerPersona: (persona: import('@/types').InterviewerPersona) => void;
+  setGapAnalysis: (ga: import('@/types').GapAnalysisResult | null) => void;
+  setVadEnabled: (enabled: boolean) => void;
   setResumeData: (r: ResumeData) => void;
   setMode: (mode: 'real' | 'practice') => void;
   setSplits: (tech: number, hr: number, code: number) => void;
@@ -70,14 +78,18 @@ interface InterviewState {
 const initialState = {
   sessionId: '',
   jobProfile: '',
+  jobDescription: '',
+  interviewerPersona: 'standard' as import('@/types').InterviewerPersona,
+  gapAnalysis: null,
+  vadEnabled: true,
   resumeData: null,
   isActive: false,
   phase: 'setup' as InterviewPhase,
   sessionStartTime: 0,
   mode: 'practice' as const,
   techSplit: 50,
-  hrSplit: 25,
-  codeSplit: 25,
+  hrSplit: 50,
+  codeSplit: 0,
   currentQuestion: '',
   currentQuestionId: '',
   currentQuestionType: '',
@@ -104,6 +116,10 @@ export const useInterviewStore = create<InterviewState>((set) => ({
   ...initialState,
 
   setJobProfile: (jp) => set({ jobProfile: jp }),
+  setJobDescription: (jd) => set({ jobDescription: jd }),
+  setInterviewerPersona: (persona) => set({ interviewerPersona: persona }),
+  setGapAnalysis: (ga) => set({ gapAnalysis: ga }),
+  setVadEnabled: (enabled) => set({ vadEnabled: enabled }),
   setResumeData: (r) => set({ resumeData: r }),
   setMode: (mode) => set({ mode }),
   setSplits: (techSplit, hrSplit, codeSplit) => set({ techSplit, hrSplit, codeSplit }),
@@ -124,6 +140,9 @@ export const useInterviewStore = create<InterviewState>((set) => ({
       body: JSON.stringify({
         sessionId,
         jobProfile: state.jobProfile,
+        jobDescription: state.jobDescription,
+        interviewerPersona: state.interviewerPersona,
+        gapAnalysis: state.gapAnalysis,
         resumeData: state.resumeData,
         mode: state.mode,
         techSplit: state.techSplit,

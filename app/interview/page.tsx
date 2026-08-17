@@ -50,15 +50,24 @@ export default function InterviewPage() {
     setQualityScore: useInterviewStore(s => s.setQualityScore),
     setSentiment: useInterviewStore(s => s.setSentiment),
     setFillerCount: useInterviewStore(s => s.setFillerCount),
+    jobDescription: useInterviewStore(s => s.jobDescription),
+    interviewerPersona: useInterviewStore(s => s.interviewerPersona),
+    gapAnalysis: useInterviewStore(s => s.gapAnalysis),
+    loudnessDb: useInterviewStore(s => s.loudnessDb),
+    vadEnabled: useInterviewStore(s => s.vadEnabled),
+    setVadEnabled: useInterviewStore(s => s.setVadEnabled),
   };
   const [isProcessing, setIsProcessing] = useState(false);
   const [questionCount, setQuestionCount] = useState(0);
   const [agentThinking, setAgentThinking] = useState(false);
   const [isEnding, setIsEnding] = useState(false);
+  const [vadCountdown, setVadCountdown] = useState<number | null>(null);
   
   const { speak, stop, voiceSelectorUI } = useEnhancedTTS();
   const { startRecording, stopRecording, cancelRecording } = useAudioRecorder();
   const isSubmittingRef = useRef(false);
+  const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (!store.resumeData || !store.jobProfile) {
@@ -66,7 +75,11 @@ export default function InterviewPage() {
       return;
     }
 
-    const ctxManager = new ContextManager(store.resumeData, store.jobProfile);
+    const ctxManager = new ContextManager(store.resumeData, store.jobProfile, {
+      jobDescription: store.jobDescription || undefined,
+      interviewerPersona: store.interviewerPersona || 'standard',
+      gapAnalysis: store.gapAnalysis || undefined,
+    });
     ctxManagerRef.current = ctxManager;
     
     // Pass the config to the agent
@@ -374,117 +387,155 @@ export default function InterviewPage() {
         setIsEnding(true);
         speak(action.finalImpression || 'Thank you for completing this interview. Great job!',
           () => store.setIsSpeaking(true),
-          () => store.setIsSpeaking(false)
-        );
-        setTimeout(() => {
-          const state = useInterviewStore.getState();
-          if (state.isActive) {
+          () => {
+            store.setIsSpeaking(false);
             store.endSession();
             router.push('/report');
           }
-        }, 7000);
+        );
+        setTimeout(() => {
+          store.endSession();
+          router.push('/report');
+        }, 4000);
         return;
       }
 
-      const question = action.question ?? 'Tell me about yourself.';
-      const qId = action.question_id ?? `q_${questionCount + 1}`;
-      const qType = action.questionType ?? 'behavioral';
-      const isFollowUp = action.isFollowUp === true;
-
-      if (!isFollowUp) {
-        setQuestionCount((c) => c + 1);
-      }
+      setQuestionCount(prev => prev + 1);
+      const isFollowUp = action.isFollowUp || false;
+      const question = action.question || 'Can you expand on your technical background?';
+      const qId = action.question_id || `turn_${questionCount + 1}`;
+      const qType = action.questionType || 'behavioral';
 
       store.setCurrentQuestion(question, qId, qType, undefined, isFollowUp);
-
-      // Use Enhanced TTS (fires in parallel with UI updates)
       speak(question, () => store.setIsSpeaking(true), () => store.setIsSpeaking(false));
-
     } catch (err) {
-      console.error('Submit error:', err);
+      console.error('Submit answer error:', err);
     } finally {
-      isSubmittingRef.current = false;
       setIsProcessing(false);
+      isSubmittingRef.current = false;
     }
-  }, [store, isProcessing, questionCount, stop, stopRecording, speak, router]);
-  
+  }, [store, isProcessing, router, questionCount, speak, stop]);
+
+  // VAD (Voice Activity Detection) Auto-Submit on natural silence pause
+  useEffect(() => {
+    if (!store.vadEnabled || !store.isListening || isProcessing || isSubmittingRef.current) {
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+      if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+      setVadCountdown(null);
+      return;
+    }
+
+    const wordCount = store.transcriptWordCount || 0;
+    const isQuiet = store.loudnessDb < -46;
+
+    // Only activate auto-submit if candidate has spoken at least 6 words
+    if (wordCount >= 6 && isQuiet) {
+      if (!silenceTimerRef.current && vadCountdown === null) {
+        silenceTimerRef.current = setTimeout(() => {
+          let remaining = 2;
+          setVadCountdown(remaining);
+          countdownIntervalRef.current = setInterval(() => {
+            remaining -= 1;
+            if (remaining <= 0) {
+              if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+              setVadCountdown(null);
+              handleSubmitAnswer();
+            } else {
+              setVadCountdown(remaining);
+            }
+          }, 1000);
+        }, 1800);
+      }
+    } else if (store.loudnessDb >= -42) {
+      // Candidate resumed speaking — cancel countdown
+      if (silenceTimerRef.current) {
+        clearTimeout(silenceTimerRef.current);
+        silenceTimerRef.current = null;
+      }
+      if (countdownIntervalRef.current) {
+        clearInterval(countdownIntervalRef.current);
+        countdownIntervalRef.current = null;
+      }
+      if (vadCountdown !== null) {
+        setVadCountdown(null);
+      }
+    }
+
+    return () => {
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+      if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+    };
+  }, [store.vadEnabled, store.isListening, store.loudnessDb, store.transcriptWordCount, isProcessing, vadCountdown, handleSubmitAnswer]);
+
   return (
-    <main className="min-h-screen bg-bg text-fg flex flex-col h-screen overflow-hidden">
-      {/* Top Header */}
-      <header className="prept-glass h-16 border-b border-border flex items-center justify-between px-6 shrink-0 relative z-50">
-        <div className="flex items-center gap-4">
-          <PreptWordmark />
-          <div className="h-4 w-px bg-border" />
-          <span className="font-mono text-xs text-fg-muted uppercase tracking-widest flex items-center gap-2">
-            <span className={`w-1.5 h-1.5 rounded-full ${store.mode === 'real' ? 'bg-success' : 'bg-accent'}`} />
-            <span className={store.mode === 'real' ? 'text-success' : 'text-accent'}>{store.mode} MODE</span>
-          </span>
-        </div>
-        
+    <div className="flex flex-col h-screen bg-bg text-fg select-none overflow-hidden font-grotesk">
+      {/* Top HUD Bar */}
+      <div className="h-14 border-b border-border bg-surface flex items-center justify-between px-6 shrink-0 z-20">
         <div className="flex items-center gap-6">
-          <span className="font-grotesk text-sm text-fg-muted tracking-wider">Q.{Math.min(12, store.turns.filter(t => !t.followUpAsked && t.answerSummary !== '(skipped)').length + 1)} / 12</span>
-          {voiceSelectorUI}
+          <PreptWordmark />
+          <div className="h-4 w-[1px] bg-border" />
+          <span className="text-xs font-mono text-fg-muted font-bold">
+            {store.mode === 'real' ? 'REAL INTERVIEW HUD' : 'PRACTICE SANDBOX'}
+          </span>
+          {store.interviewerPersona && store.interviewerPersona !== 'standard' && (
+            <span className="hidden sm:inline-block px-2 py-0.5 text-[10px] font-mono uppercase bg-accent-muted text-accent border border-accent/20">
+              {store.interviewerPersona} style
+            </span>
+          )}
+        </div>
+
+        <div className="flex items-center gap-4">
+          {/* VAD Toggle */}
           <button
-            onClick={() => { store.endSession(); router.push('/report'); }}
-            className="px-4 py-1.5 border border-danger text-danger hover:bg-danger-muted rounded-lg text-sm font-bold transition-colors"
+            onClick={() => store.setVadEnabled(!store.vadEnabled)}
+            className={`px-3 py-1 text-xs font-mono border transition-colors flex items-center gap-2 ${
+              store.vadEnabled
+                ? 'bg-accent-muted text-accent border-accent/30'
+                : 'bg-surface text-fg-muted border-border hover:text-fg'
+            }`}
+            title="Voice Activity Detection (Auto-submits on natural speech pause)"
           >
-            End Session
+            <span className={`w-2 h-2 rounded-full ${store.vadEnabled ? 'bg-accent animate-pulse' : 'bg-fg-muted'}`} />
+            VAD Auto-Listen: {store.vadEnabled ? 'ON' : 'OFF'}
+          </button>
+
+          {voiceSelectorUI}
+          
+          <button 
+            onClick={() => {
+              store.endSession();
+              router.push('/dashboard');
+            }}
+            className="text-xs text-danger hover:underline font-mono"
+          >
+            Abort
           </button>
         </div>
-      </header>
+      </div>
 
       {/* Main Container */}
-      <div className="flex-1 flex overflow-hidden relative">
-        
-        {/* PANE 1: Left Monitor / Candidate Sidebar (width: 300px) */}
-        <div className="w-[300px] shrink-0 bg-surface border-r border-border p-4 flex flex-col gap-4 overflow-y-auto scrollbar-custom z-20">
-          {/* Video Player */}
-          <div className="relative rounded-xl overflow-hidden bg-black aspect-video border border-border shadow-md">
-            <video
-              ref={videoRef}
-              autoPlay
-              muted
-              playsInline
-              className="w-full h-full object-cover transform -scale-x-100"
-            />
-            
-            {/* Real-time emotion overlay */}
-            <EmotionOverlay videoRef={videoRef} />
-            
-            {store.currentEmotion && (
-              <div className="absolute top-3 left-3 px-2 py-1 prept-glass rounded-lg text-[10px] font-mono font-bold uppercase flex items-center gap-2 text-fg">
-                <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
-                {store.currentEmotion.dominant}
+      <div className="flex flex-grow min-h-0 overflow-hidden relative">
+        {/* PANE 1: Left Live Telemetry Column */}
+        <div className="w-[320px] shrink-0 bg-surface border-r border-border p-6 overflow-y-auto scrollbar-custom flex flex-col gap-6 z-10">
+          <div className="flex flex-col gap-3">
+            <h3 className="prept-label">Webcam Monitor</h3>
+            <div className="relative aspect-video bg-surface-warm border border-border overflow-hidden">
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+                className="w-full h-full object-cover grayscale contrast-125"
+              />
+              <EmotionOverlay videoRef={videoRef} />
+              <div className="absolute top-2 left-2 px-2 py-0.5 bg-bg/80 border border-border text-[9px] font-mono text-fg-muted">
+                CAM_01 // 30FPS
               </div>
-            )}
-            
-            <AnimatePresence>
-              {store.isSpeaking && (
-                <motion.div 
-                  initial={{ opacity: 0, y: 10 }} 
-                  animate={{ opacity: 1, y: 0 }} 
-                  exit={{ opacity: 0, y: 10 }}
-                  className="absolute bottom-3 right-3 px-3 py-1.5 bg-accent/20 backdrop-blur-md border border-accent/30 text-accent rounded-full flex items-center gap-2 text-[10px] font-bold shadow-sm"
-                >
-                  <div className="flex items-center gap-0.5">
-                    {[1, 2, 3].map(i => (
-                      <motion.div 
-                        key={i} 
-                        animate={{ height: ['4px', '10px', '4px'] }} 
-                        transition={{ repeat: Infinity, duration: 0.8, delay: i * 0.15 }}
-                        className="w-0.5 bg-accent rounded-full" 
-                      />
-                    ))}
-                  </div>
-                  AI SPEAKING
-                </motion.div>
-              )}
-            </AnimatePresence>
+            </div>
           </div>
 
-          {/* Practice metrics or simpler real-mode panel */}
           {store.mode === 'practice' ? (
-            <div className="prept-panel p-4"><ScorePanel /></div>
+            <ScorePanel />
           ) : (
             <div className="prept-panel p-5 flex flex-col gap-3">
               <h3 className="prept-label">Real Mode Active</h3>
@@ -525,6 +576,18 @@ export default function InterviewPage() {
 
           {/* Bottom Action Bar */}
           <div className="p-4 border-t border-border bg-surface shrink-0 z-10 flex gap-4 items-center">
+            {/* VAD Countdown Indicator */}
+            {vadCountdown !== null && (
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                className="px-3 py-1.5 bg-accent text-accent-on text-xs font-mono font-bold flex items-center gap-2"
+              >
+                <span className="w-2 h-2 rounded-full bg-white animate-ping" />
+                Silence detected. Auto-submitting in {vadCountdown}s...
+              </motion.div>
+            )}
+
             {store.mode === 'practice' && (
               <button 
                 onClick={handleSkipQuestion} 
@@ -600,7 +663,7 @@ export default function InterviewPage() {
       
       {/* Hidden Audio Analyzer for metrics */}
       <AudioAnalyzer />
-    </main>
+    </div>
   );
 }
 

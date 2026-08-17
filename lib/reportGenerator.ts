@@ -10,16 +10,18 @@ export async function generateReport(report: SessionReport): Promise<Blob> {
   const W = 210, M = 15;
 
   // ── COVER ──
-  doc.setFillColor(30, 30, 50);
+  doc.setFillColor(15, 23, 42); // #0F172A (Deep Slate)
   doc.rect(0, 0, W, 60, 'F');
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(22);
   doc.setFont('helvetica', 'bold');
-  doc.text('Interview Performance Report', M, 28);
-  doc.setFontSize(12);
+  doc.text('Prept // Candidate Assessment Report', M, 26);
+  doc.setFontSize(11);
   doc.setFont('helvetica', 'normal');
-  doc.text(`${report.candidateName}  ·  ${report.jobRole}  ·  ${report.date}`, M, 40);
-  doc.text(`Session duration: ${report.duration} minutes`, M, 50);
+  doc.text(`Candidate: ${report.candidateName}  |  Role: ${report.jobRole}  |  Date: ${report.date}`, M, 38);
+  doc.setTextColor(148, 163, 184);
+  doc.setFontSize(9);
+  doc.text(`Assessment Mode: Standard Evaluation  |  Duration: ${report.duration} mins`, M, 48);
 
   // ── OVERALL SCORES ──
   let y = 75;

@@ -62,6 +62,9 @@ model InterviewSession {
   hrSplit    Int      @default(25)
   codeSplit  Int      @default(25)
   overallScore Float?
+  jobDescription String?
+  interviewerPersona String? @default("standard")
+  gapAnalysis    String? // JSON string
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
   turns      Turn[]

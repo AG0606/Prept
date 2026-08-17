@@ -10,10 +10,21 @@ import { LogOut, FileText, Play, Settings, BarChart, Clock, Plus, Check } from '
 import { motion, AnimatePresence } from 'framer-motion';
 import { PreptWordmark } from '@/components/PreptLogo';
 
+import { SkillAnalyticsRadar } from '@/components/SkillAnalyticsRadar';
+import type { InterviewerPersona, GapAnalysisResult } from '@/types';
+import { Sparkles, Compass, Target, AlertTriangle } from 'lucide-react';
+
 const JOB_ROLES = [
   'Software Engineer', 'Frontend Developer', 'Backend Developer',
   'Full Stack Developer', 'Data Scientist', 'Machine Learning Engineer',
   'Product Manager', 'Other'
+];
+
+const PERSONAS: { id: InterviewerPersona; title: string; subtitle: string; tag: string }[] = [
+  { id: 'standard', title: 'Standard', subtitle: 'Balanced, structured & encouraging', tag: 'Balanced' },
+  { id: 'faang', title: 'Big Tech / FAANG', subtitle: 'Heavy scale, system metrics & strict STAR', tag: 'High Rigor' },
+  { id: 'startup', title: 'Startup VP', subtitle: 'Pragmatic, ownership & rapid execution', tag: 'Pragmatic' },
+  { id: 'challenger', title: 'Challenger', subtitle: 'Deep follow-ups & probing assumptions', tag: 'Stress Probe' },
 ];
 
 export default function DashboardPage() {
@@ -24,6 +35,12 @@ export default function DashboardPage() {
   const setResumeData = useInterviewStore((s) => s.setResumeData);
   const jobProfile = useInterviewStore((s) => s.jobProfile);
   const setJobProfile = useInterviewStore((s) => s.setJobProfile);
+  const jobDescription = useInterviewStore((s) => s.jobDescription);
+  const setJobDescription = useInterviewStore((s) => s.setJobDescription);
+  const interviewerPersona = useInterviewStore((s) => s.interviewerPersona);
+  const setInterviewerPersona = useInterviewStore((s) => s.setInterviewerPersona);
+  const gapAnalysis = useInterviewStore((s) => s.gapAnalysis);
+  const setGapAnalysis = useInterviewStore((s) => s.setGapAnalysis);
   const mode = useInterviewStore((s) => s.mode);
   const setMode = useInterviewStore((s) => s.setMode);
   const techSplit = useInterviewStore((s) => s.techSplit);
@@ -39,6 +56,9 @@ export default function DashboardPage() {
   const [history, setHistory] = useState<any[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [selectedResume, setSelectedResume] = useState<any | null>(null);
+  
+  const [showJdInput, setShowJdInput] = useState(false);
+  const [isAnalyzingJd, setIsAnalyzingJd] = useState(false);
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -75,6 +95,32 @@ export default function DashboardPage() {
   useEffect(() => {
     fetchDashboardData();
   }, [fetchDashboardData]);
+
+  const handleAnalyzeJd = async () => {
+    if (!jobDescription || jobDescription.trim().length < 20 || !resumeData) return;
+    setIsAnalyzingJd(true);
+    try {
+      const res = await fetch('/api/jd-analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jobDescription,
+          resumeData,
+          jobProfile: jobProfile || customRole || 'Software Engineer',
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.analysis) {
+          setGapAnalysis(data.analysis);
+        }
+      }
+    } catch (e) {
+      console.error('Failed to analyze JD:', e);
+    } finally {
+      setIsAnalyzingJd(false);
+    }
+  };
 
   const handleStart = () => {
     if (jobProfile === 'Other' && customRole) {
@@ -297,12 +343,41 @@ export default function DashboardPage() {
                         </button>
                       </div>
                     </div>
+                    {/* Persona Selector */}
+                    <div>
+                      <div className="flex items-center justify-between mb-3">
+                        <p className="text-sm font-bold text-fg">3. Interviewer Persona & Tone</p>
+                        <span className="text-xs font-mono text-fg-muted">Adaptive AI Style</span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {PERSONAS.map((p) => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => setInterviewerPersona(p.id)}
+                            className={`p-4 text-left border transition-all ${
+                              interviewerPersona === p.id
+                                ? 'bg-surface border-accent ring-1 ring-accent'
+                                : 'bg-surface border-border hover:border-fg-muted'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="font-bold text-sm text-fg">{p.title}</span>
+                              <span className="text-[10px] font-mono px-2 py-0.5 bg-accent-muted text-accent border border-accent/20">
+                                {p.tag}
+                              </span>
+                            </div>
+                            <p className="text-xs text-fg-muted leading-relaxed">{p.subtitle}</p>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
 
                     {/* Sliders (Only if Practice) */}
                     {mode === 'practice' && (
                       <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}>
-                        <p className="text-sm font-bold text-fg mb-3">3. Question Mix</p>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-surface-warm rounded-none p-6">
+                        <p className="text-sm font-bold text-fg mb-3">4. Question Mix</p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-surface-warm rounded-none p-6 border border-border-soft">
                           <div>
                             <div className="flex justify-between text-xs font-mono mb-2"><span>Technical</span><span>{techSplit}%</span></div>
                             <input type="range" min="0" max="100" value={techSplit} onChange={(e) => handleSliderChange('tech', Number(e.target.value))} className="w-full accent-[var(--accent)] bg-border h-1.5 rounded-none appearance-none cursor-pointer" />
@@ -314,6 +389,96 @@ export default function DashboardPage() {
                         </div>
                       </motion.div>
                     )}
+
+                    {/* Target Job Description & Gap Analysis */}
+                    <div className="border border-border-soft bg-surface-warm/50 p-5">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Target size={16} className="text-accent" />
+                          <span className="text-sm font-bold text-fg">Target Job Description (Optional)</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setShowJdInput(!showJdInput)}
+                          className="text-xs font-mono text-accent hover:underline"
+                        >
+                          {showJdInput ? 'Collapse [-]' : '+ Paste Target JD'}
+                        </button>
+                      </div>
+
+                      {showJdInput && (
+                        <div className="mt-4 space-y-3">
+                          <textarea
+                            rows={4}
+                            className="prept-input w-full text-xs font-mono resize-y"
+                            placeholder="Paste full job description from LinkedIn, Greenhouse, or Lever to run automatic gap analysis and tailor questions..."
+                            value={jobDescription}
+                            onChange={(e) => setJobDescription(e.target.value)}
+                          />
+
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] text-fg-muted font-mono">
+                              {jobDescription.length > 0 ? `${jobDescription.length} characters` : 'Zero extra tokens until analyzed'}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={handleAnalyzeJd}
+                              disabled={isAnalyzingJd || jobDescription.trim().length < 20 || !resumeData}
+                              className="px-3 py-1.5 bg-accent text-accent-on text-xs font-mono font-bold hover:bg-accent/90 disabled:opacity-50 flex items-center gap-2"
+                            >
+                              <Sparkles size={13} />
+                              {isAnalyzingJd ? 'Analyzing Gaps...' : 'Analyze Gaps vs Resume'}
+                            </button>
+                          </div>
+
+                          {/* Gap Analysis HUD */}
+                          {gapAnalysis && (
+                            <motion.div
+                              initial={{ opacity: 0, y: 5 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              className="mt-4 p-4 bg-surface border border-border space-y-3"
+                            >
+                              <div className="flex items-center justify-between border-b border-border-soft pb-2">
+                                <span className="prept-label">Resume-to-JD Alignment</span>
+                                <span className="px-2.5 py-0.5 bg-success-muted text-success text-xs font-mono font-bold">
+                                  {gapAnalysis.matchScore}% Match
+                                </span>
+                              </div>
+
+                              {gapAnalysis.matchingStrengths?.length > 0 && (
+                                <div>
+                                  <span className="text-[11px] font-mono text-success flex items-center gap-1 mb-1">
+                                    <Check size={12} /> Matching Strengths
+                                  </span>
+                                  <ul className="space-y-1">
+                                    {gapAnalysis.matchingStrengths.map((str, idx) => (
+                                      <li key={idx} className="text-xs text-fg-muted pl-4 relative before:content-['•'] before:absolute before:left-1 before:text-success">
+                                        {str}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+
+                              {gapAnalysis.missingGaps?.length > 0 && (
+                                <div>
+                                  <span className="text-[11px] font-mono text-warn flex items-center gap-1 mb-1">
+                                    <AlertTriangle size={12} /> Target Interview Focus Areas (Gaps)
+                                  </span>
+                                  <ul className="space-y-1">
+                                    {gapAnalysis.missingGaps.map((gap, idx) => (
+                                      <li key={idx} className="text-xs text-fg-muted pl-4 relative before:content-['•'] before:absolute before:left-1 before:text-warn">
+                                        {gap}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                            </motion.div>
+                          )}
+                        </div>
+                      )}
+                    </div>
 
                     <button
                       onClick={handleStart}
@@ -378,24 +543,21 @@ export default function DashboardPage() {
                         <div className="prept-icon-badge w-10 h-10 rounded-lg flex items-center justify-center">
                           <FileText size={20} />
                         </div>
-                        <div className="flex gap-2 items-center">
-                          {rating > 0 && (
-                            <span className={`px-2 py-1 text-xs font-mono font-bold border border-current ${ratingColor} ${ratingBg}`}>
-                              {rating}/10
-                            </span>
-                          )}
-                          {res.isCurrent && <span className="bg-accent text-accent-on rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-widest">Active</span>}
-                        </div>
+                        {rating > 0 && (
+                          <span className={`px-2.5 py-1 text-xs font-mono font-bold ${ratingBg} ${ratingColor} border border-current/20`}>
+                            ★ {rating}/10
+                          </span>
+                        )}
                       </div>
                       
-                      <h3 className="font-bold text-lg mb-1 truncate">{res.name}</h3>
+                      <h3 className="font-bold text-lg mb-1 line-clamp-1">{res.name}</h3>
                       <p className="text-xs text-fg-muted font-mono mb-4">{new Date(res.updatedAt).toLocaleDateString()}</p>
                       
                       {topSkills.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mb-4">
-                          {topSkills.map((skill: string, i: number) => (
-                            <span key={i} className="px-2 py-0.5 bg-surface-warm text-fg-muted text-[10px] font-mono border border-border">
-                              {skill}
+                        <div className="flex flex-wrap gap-1.5 mb-4">
+                          {topSkills.map((sk: string, i: number) => (
+                            <span key={i} className="px-2 py-0.5 bg-accent-muted text-accent text-[11px] font-mono border border-accent/20">
+                              {sk}
                             </span>
                           ))}
                           {skills.length > 5 && (
@@ -438,43 +600,56 @@ export default function DashboardPage() {
 
           {/* HISTORY TAB */}
           {activeTab === 'history' && (
-            <motion.div key="history" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-6">
-              <div className="mb-8">
-                <p className="prept-label mb-2">Review</p>
-                <h2 className="text-2xl font-extrabold tracking-tight">Interview Records</h2>
+            <motion.div key="history" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-8">
+              <div>
+                <p className="prept-label mb-2">Review & Analytics</p>
+                <h2 className="text-2xl font-extrabold tracking-tight">Candidate Performance History</h2>
               </div>
+
+              {/* Skill Analytics Radar */}
+              {history.length > 0 && (
+                <div>
+                  <p className="text-xs font-mono text-fg-muted mb-3 flex items-center gap-1.5">
+                    <Compass size={14} className="text-accent" /> Multidimensional Competency Radar
+                  </p>
+                  <SkillAnalyticsRadar history={history} />
+                </div>
+              )}
               
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {history.map((session) => (
-                  <div 
-                    key={session.id} 
-                    onClick={() => router.push(`/report?id=${session.id}`)}
-                    className="prept-bento-card p-6 cursor-pointer flex flex-col justify-between min-h-[200px]"
-                  >
-                    <div>
-                      <div className="flex items-center justify-between mb-4">
-                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${session.mode === 'real' ? 'bg-success-muted text-success' : 'bg-accent-muted text-accent'}`}>
-                          {session.mode}
-                        </span>
-                        <Clock size={14} className="text-fg-subtle" />
+              <div className="space-y-4">
+                <p className="prept-label">Session Transcripts</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {history.map((session) => (
+                    <div 
+                      key={session.id} 
+                      onClick={() => router.push(`/report?id=${session.id}`)}
+                      className="prept-bento-card p-6 cursor-pointer flex flex-col justify-between min-h-[200px]"
+                    >
+                      <div>
+                        <div className="flex items-center justify-between mb-4">
+                          <span className={`px-2.5 py-1 text-[10px] font-mono font-bold uppercase tracking-wider ${session.mode === 'real' ? 'bg-success-muted text-success' : 'bg-accent-muted text-accent'}`}>
+                            {session.mode}
+                          </span>
+                          <Clock size={14} className="text-fg-subtle" />
+                        </div>
+                        <h3 className="font-bold text-lg mb-1 line-clamp-2">{session.jobProfile}</h3>
+                        <p className="text-xs text-fg-muted font-mono">{new Date(session.createdAt).toLocaleDateString()}</p>
                       </div>
-                      <h3 className="font-bold text-lg mb-1 line-clamp-2">{session.jobProfile}</h3>
-                      <p className="text-xs text-fg-muted font-mono">{new Date(session.createdAt).toLocaleDateString()}</p>
+                      <div className="flex justify-between items-end mt-6 pt-4 border-t border-border-soft">
+                        <span className="text-xs text-fg-muted font-medium">Score</span>
+                        <span className={`font-bold font-mono text-2xl leading-none ${session.overallScore >= 7 ? 'text-success' : session.overallScore >= 5 ? 'text-warn' : 'text-danger'}`}>
+                          {session.overallScore ? `${session.overallScore}/10` : '-'}
+                        </span>
+                      </div>
                     </div>
-                    <div className="flex justify-between items-end mt-6 pt-4 border-t border-border-soft">
-                      <span className="text-xs text-fg-muted font-medium">Score</span>
-                      <span className={`font-bold font-mono text-2xl leading-none ${session.overallScore >= 7 ? 'text-success' : session.overallScore >= 5 ? 'text-warn' : 'text-danger'}`}>
-                        {session.overallScore ? `${session.overallScore}/10` : '-'}
-                      </span>
+                  ))}
+                  {history.length === 0 && (
+                    <div className="col-span-full prept-panel border-dashed border-2 py-24 text-center">
+                      <p className="text-fg-muted font-medium mb-4">No previous interviews found.</p>
+                      <button onClick={() => setActiveTab('home')} className="prept-btn-gradient">Start a practice session</button>
                     </div>
-                  </div>
-                ))}
-                {history.length === 0 && (
-                  <div className="col-span-full prept-panel border-dashed border-2 py-24 text-center">
-                    <p className="text-fg-muted font-medium mb-4">No previous interviews found.</p>
-                    <button onClick={() => setActiveTab('home')} className="prept-btn-gradient">Start a practice session</button>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             </motion.div>
           )}

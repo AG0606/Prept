@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
     } catch (e) {
       return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
     }
-    const { sessionId, jobProfile, mode, techSplit, hrSplit, codeSplit } = body;
+    const { sessionId, jobProfile, mode, techSplit, hrSplit, codeSplit, jobDescription, interviewerPersona, gapAnalysis } = body;
 
     if (!sessionId || !jobProfile) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -47,6 +47,9 @@ export async function POST(req: NextRequest) {
         techSplit: techSplit || 50,
         hrSplit: hrSplit || 25,
         codeSplit: codeSplit || 25,
+        jobDescription: jobDescription || null,
+        interviewerPersona: interviewerPersona || 'standard',
+        gapAnalysis: gapAnalysis ? (typeof gapAnalysis === 'string' ? gapAnalysis : JSON.stringify(gapAnalysis)) : null,
         userId: user.id,
         resumeId: currentResume?.id || null
       }

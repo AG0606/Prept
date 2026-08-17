@@ -108,9 +108,21 @@ export interface TurnSummary {
   followUpAsked: boolean;
 }
 
+export type InterviewerPersona = 'standard' | 'faang' | 'startup' | 'challenger';
+
+export interface GapAnalysisResult {
+  matchScore: number;
+  matchingStrengths: string[];
+  missingGaps: string[];
+  recommendedFocusAreas: string[];
+}
+
 export interface SessionContext {
   resumeSnapshot: string; // compressed resume facts
   jobProfile: string;
+  jobDescription?: string;
+  interviewerPersona?: InterviewerPersona;
+  gapAnalysis?: GapAnalysisResult;
   turns: TurnSummary[];
   openThreads: string[]; // topics to follow up on
   askedQuestions: Set<string>;

@@ -1,20 +1,44 @@
 import { estimateTokens, trimToTokenBudget, TOKEN_BUDGETS } from './tokenCounter';
-import type { ResumeData, TurnSummary, SessionContext, LiveSignals, QuestionCategory } from '@/types';
+import type { ResumeData, TurnSummary, SessionContext, LiveSignals, QuestionCategory, InterviewerPersona, GapAnalysisResult } from '@/types';
 
 export class ContextManager {
   private ctx: SessionContext;
   private resumeData: ResumeData;
 
-  constructor(resume: ResumeData, jobProfile: string) {
+  constructor(
+    resume: ResumeData,
+    jobProfile: string,
+    options?: {
+      jobDescription?: string;
+      interviewerPersona?: InterviewerPersona;
+      gapAnalysis?: GapAnalysisResult;
+    }
+  ) {
     this.resumeData = resume;
     this.ctx = {
       resumeSnapshot: this.compressResume(resume),
       jobProfile,
+      jobDescription: options?.jobDescription,
+      interviewerPersona: options?.interviewerPersona || 'standard',
+      gapAnalysis: options?.gapAnalysis,
       turns: [],
       openThreads: [],
       askedQuestions: new Set<string>(),
       totalTokensUsed: 0,
     };
+  }
+
+  setJobDescription(jd: string, gapAnalysis?: GapAnalysisResult) {
+    this.ctx.jobDescription = jd;
+    if (gapAnalysis) this.ctx.gapAnalysis = gapAnalysis;
+  }
+
+  setInterviewerPersona(persona: InterviewerPersona) {
+    this.ctx.interviewerPersona = persona;
+  }
+
+  getInterviewerPersona(): InterviewerPersona {
+    return this.ctx.interviewerPersona || 'standard';
   }
 
   /** Compress resume — keep most relevant facts within token budget */
@@ -144,6 +168,20 @@ export class ContextManager {
     }
 
     parts.push(`=ROLE= ${this.ctx.jobProfile}`);
+    if (this.ctx.interviewerPersona && this.ctx.interviewerPersona !== 'standard') {
+      parts.push(`=PERSONA= ${this.ctx.interviewerPersona.toUpperCase()}`);
+    }
+    if (this.ctx.jobDescription) {
+      parts.push(`=TARGET_JOB_DESCRIPTION= ${trimToTokenBudget(this.ctx.jobDescription, 300)}`);
+    }
+    if (this.ctx.gapAnalysis) {
+      if (this.ctx.gapAnalysis.missingGaps?.length > 0) {
+        parts.push(`=COMPETENCY_GAPS= ${this.ctx.gapAnalysis.missingGaps.join('; ')}`);
+      }
+      if (this.ctx.gapAnalysis.recommendedFocusAreas?.length > 0) {
+        parts.push(`=FOCUS_AREAS= ${this.ctx.gapAnalysis.recommendedFocusAreas.join('; ')}`);
+      }
+    }
     parts.push(`=HISTORY= ${trimToTokenBudget(history, TOKEN_BUDGETS.CONVERSATION_HISTORY)}`);
     parts.push(`=QUESTION_COUNTS= tech:${typeCounts.technical} behavioral:${typeCounts.behavioral} coding:${typeCounts.coding} total:${this.ctx.turns.length}`);
     if (threads) parts.push(`=OPEN_THREADS= ${threads}`);
