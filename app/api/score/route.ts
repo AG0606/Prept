@@ -60,43 +60,46 @@ function parseScoreResponse(text: string) {
   };
 }
 
-/** Score via Groq (Llama 3.3 70B) — primary provider for high-frequency scoring */
+/** Score via Groq — primary provider for high-frequency scoring */
 async function scoreWithGroq(prompt: string): Promise<ReturnType<typeof parseScoreResponse> | null> {
   const groqKey = process.env.GROQ_API_KEY;
   if (!groqKey) return null;
 
-  try {
-    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${groqKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
-        messages: [
-          { role: 'system', content: 'You are an interview response scorer. Return ONLY valid JSON with the requested fields. No extra text.' },
-          { role: 'user', content: prompt },
-        ],
-        response_format: { type: 'json_object' },
-        temperature: 0.3,
-        max_tokens: 300,
-      }),
-    });
+  const models = ['openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'groq/compound'];
+  for (const model of models) {
+    try {
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${groqKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: 'system', content: 'You are an interview response scorer. Return ONLY valid JSON with the requested fields. No extra text.' },
+            { role: 'user', content: prompt },
+          ],
+          response_format: { type: 'json_object' },
+          temperature: 0.3,
+          max_tokens: 300,
+        }),
+      });
 
-    if (!response.ok) {
-      console.warn('Groq scoring failed:', response.statusText);
-      return null;
+      if (!response.ok) {
+        console.warn(`Groq scoring (${model}) failed:`, response.statusText);
+        continue;
+      }
+
+      const data = await response.json();
+      if (!data.choices || !data.choices[0]?.message?.content) continue;
+      const text = data.choices[0].message.content;
+      return parseScoreResponse(text);
+    } catch (error) {
+      console.warn(`Groq scoring error (${model}):`, error);
     }
-
-    const data = await response.json();
-    if (!data.choices || !data.choices[0]) return null;
-    const text = data.choices[0].message.content;
-    return parseScoreResponse(text);
-  } catch (error) {
-    console.warn('Groq scoring error:', error);
-    return null;
   }
+  return null;
 }
 
 /** Score via Gemini — fallback provider */
@@ -104,24 +107,27 @@ async function scoreWithGemini(prompt: string): Promise<ReturnType<typeof parseS
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return null;
 
-  try {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({
-      model: 'gemini-flash-latest',
-      generationConfig: {
-        responseMimeType: 'application/json',
-        temperature: 0.3,
-        maxOutputTokens: 300,
-      }
-    });
+  const models = ['gemini-3.6-flash', 'gemini-flash-latest'];
+  for (const modelName of models) {
+    try {
+      const genAI = new GoogleGenerativeAI(apiKey);
+      const model = genAI.getGenerativeModel({
+        model: modelName,
+        generationConfig: {
+          responseMimeType: 'application/json',
+          temperature: 0.3,
+          maxOutputTokens: 300,
+        }
+      });
 
-    const result = await model.generateContent(prompt);
-    const text = result.response.text();
-    return parseScoreResponse(text);
-  } catch (error) {
-    console.warn('Gemini scoring error:', error);
-    return null;
+      const result = await model.generateContent(prompt);
+      const text = result.response.text();
+      return parseScoreResponse(text);
+    } catch (error) {
+      console.warn(`Gemini scoring error (${modelName}):`, error);
+    }
   }
+  return null;
 }
 
 export async function POST(req: NextRequest) {

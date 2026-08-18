@@ -54,50 +54,61 @@ Return ONLY valid JSON in this exact format:
 
     let text = '';
 
-    // Primary: Gemini Flash
-    try {
-      const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({
-        model: 'gemini-flash-latest',
-        generationConfig: {
-          responseMimeType: 'application/json',
-          temperature: 0.3,
-        }
-      });
-      const result = await model.generateContent(prompt);
-      text = result.response.text().trim();
-    } catch (geminiError) {
-      console.warn('Gemini evaluate failed, falling back to Groq...', geminiError);
-      
+    // Primary: Gemini Flash (with model fallback)
+    const geminiModels = ['gemini-3.6-flash', 'gemini-flash-latest'];
+    for (const m of geminiModels) {
+      try {
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const model = genAI.getGenerativeModel({
+          model: m,
+          generationConfig: {
+            responseMimeType: 'application/json',
+            temperature: 0.3,
+          }
+        });
+        const result = await model.generateContent(prompt);
+        text = result.response.text().trim();
+        if (text) break;
+      } catch (geminiError) {
+        console.warn(`Gemini evaluate (${m}) failed, trying next...`, geminiError);
+      }
+    }
+
+    // Secondary: Groq fallback
+    if (!text) {
       const groqKey = process.env.GROQ_API_KEY;
       if (groqKey) {
-        try {
-          const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${groqKey}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              model: 'llama-3.3-70b-versatile',
-              messages: [
-                { role: 'system', content: 'You are an interview session evaluator. Return ONLY valid JSON with the requested fields.' },
-                { role: 'user', content: prompt }
-              ],
-              response_format: { type: 'json_object' },
-              temperature: 0.3,
-              max_tokens: 800,
-            })
-          });
+        const groqModels = ['openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'groq/compound'];
+        for (const gm of groqModels) {
+          try {
+            const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${groqKey}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                model: gm,
+                messages: [
+                  { role: 'system', content: 'You are an interview session evaluator. Return ONLY valid JSON with the requested fields.' },
+                  { role: 'user', content: prompt }
+                ],
+                response_format: { type: 'json_object' },
+                temperature: 0.3,
+                max_tokens: 800,
+              })
+            });
 
-          if (groqRes.ok) {
-            const groqData = await groqRes.json();
-            if (groqData.choices?.[0]) {
-              text = groqData.choices[0].message.content.trim();
+            if (groqRes.ok) {
+              const groqData = await groqRes.json();
+              if (groqData.choices?.[0]?.message?.content) {
+                text = groqData.choices[0].message.content.trim();
+                break;
+              }
             }
+          } catch (groqError) {
+            console.error(`Groq fallback (${gm}) failed:`, groqError);
           }
-        } catch (groqError) {
-          console.error('Groq fallback also failed:', groqError);
         }
       }
     }

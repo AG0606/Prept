@@ -42,15 +42,41 @@ export function ResumeUploader({ onUploadSuccess, onViewProfile }: ResumeUploade
       try {
         const resumeData = await parseResumePDF(file, jobProfile || undefined);
         
-        // Save to DB
-        await fetch('/api/resume', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(resumeData),
-        });
+        let finalResumeData: any = { ...resumeData };
 
-        setResumeData(resumeData);
-        setUploadedData(resumeData);
+        // Save to DB if user is authenticated
+        try {
+          const dbRes = await fetch('/api/resume', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(resumeData),
+          });
+
+          if (dbRes.ok) {
+            const savedDbRecord = await dbRes.json();
+            if (savedDbRecord && savedDbRecord.id) {
+              finalResumeData = {
+                ...finalResumeData,
+                id: savedDbRecord.id,
+                name: savedDbRecord.name || finalResumeData.name,
+              };
+            }
+          }
+        } catch (dbErr) {
+          console.warn('Could not save resume to DB directly (will sync upon sign-in):', dbErr);
+        }
+
+        // Save to local storage as fallback/guest persistence
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem('prept_active_resume', JSON.stringify(finalResumeData));
+          } catch (e) {
+            // Ignore quota errors
+          }
+        }
+
+        setResumeData(finalResumeData);
+        setUploadedData(finalResumeData);
         setSuccess(true);
         if (onUploadSuccess) onUploadSuccess();
       } catch (err) {
@@ -61,7 +87,7 @@ export function ResumeUploader({ onUploadSuccess, onViewProfile }: ResumeUploade
         setIsProcessing(false);
       }
     },
-    [setResumeData, jobProfile]
+    [setResumeData, jobProfile, onUploadSuccess]
   );
 
   const onDrop = useCallback(

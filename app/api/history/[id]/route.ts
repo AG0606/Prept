@@ -14,6 +14,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
     const { id } = await params;
 
+    const user = await prisma.user.findUnique({
+      where: { email: session.user.email }
+    });
+
     const interview = await prisma.interviewSession.findUnique({
       where: { id },
       include: {
@@ -26,7 +30,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
 
-    if (interview.userId !== (session.user as any).id) {
+    if (!user || (interview.userId !== user.id && interview.userId !== (session.user as any).id)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 

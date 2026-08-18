@@ -20,35 +20,47 @@ async function callGroq(
   const groqKey = process.env.GROQ_API_KEY;
   if (!groqKey) throw new Error('GROQ_API_KEY not configured');
 
-  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${groqKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'llama-3.3-70b-versatile',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userMessage },
-      ],
-      response_format: { type: 'json_object' },
-      temperature: options?.temperature ?? 0.6,
-      max_tokens: options?.maxTokens ?? 900,
-    }),
-  });
+  const models = ['openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'groq/compound'];
+  let lastErr: any = null;
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Groq API error: ${response.statusText} - ${errorText}`);
+  for (const model of models) {
+    try {
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${groqKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userMessage },
+          ],
+          response_format: { type: 'json_object' },
+          temperature: options?.temperature ?? 0.6,
+          max_tokens: options?.maxTokens ?? 900,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Groq API error (${model}): ${response.statusText} - ${errorText}`);
+      }
+
+      const data = await response.json();
+      if (!data.choices || !data.choices[0]?.message?.content) {
+        throw new Error(`Groq (${model}) returned empty choices`);
+      }
+      loadBalancer.recordCall('groq');
+      return data.choices[0].message.content;
+    } catch (e) {
+      lastErr = e;
+      console.warn(`Groq model ${model} failed in agent-turn:`, e);
+    }
   }
 
-  const data = await response.json();
-  if (!data.choices || !data.choices[0]) {
-    throw new Error('Groq returned empty choices');
-  }
-  loadBalancer.recordCall('groq');
-  return data.choices[0].message.content;
+  throw lastErr || new Error('All Groq models failed in agent-turn');
 }
 
 // ── Gemini LLM Call ─────────────────────────────────────────
@@ -61,19 +73,31 @@ async function callGemini(
   if (!apiKey) throw new Error('GEMINI_API_KEY not configured');
 
   const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({
-    model: 'gemini-flash-latest',
-    systemInstruction: systemPrompt,
-    generationConfig: {
-      responseMimeType: 'application/json',
-      temperature: options?.temperature ?? 0.6,
-      maxOutputTokens: options?.maxTokens ?? 900,
-    },
-  });
+  const models = ['gemini-3.6-flash', 'gemini-flash-latest'];
+  let lastErr: any = null;
 
-  const result = await model.generateContent(userMessage);
-  loadBalancer.recordCall('gemini');
-  return result.response.text();
+  for (const modelName of models) {
+    try {
+      const model = genAI.getGenerativeModel({
+        model: modelName,
+        systemInstruction: systemPrompt,
+        generationConfig: {
+          responseMimeType: 'application/json',
+          temperature: options?.temperature ?? 0.6,
+          maxOutputTokens: options?.maxTokens ?? 900,
+        },
+      });
+
+      const result = await model.generateContent(userMessage);
+      loadBalancer.recordCall('gemini');
+      return result.response.text();
+    } catch (e) {
+      lastErr = e;
+      console.warn(`Gemini model ${modelName} failed in agent-turn:`, e);
+    }
+  }
+
+  throw lastErr || new Error('All Gemini models failed in agent-turn');
 }
 
 // ── Unified Prompt Builder ──────────────────────────────────

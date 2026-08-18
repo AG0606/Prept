@@ -14,34 +14,46 @@ async function callGroq(systemPrompt: string, userMessage: string, options?: { t
     throw new Error('GROQ_API_KEY not configured');
   }
 
-  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${groqKey}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      model: 'llama-3.3-70b-versatile',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userMessage }
-      ],
-      response_format: { type: 'json_object' },
-      temperature: options?.temperature ?? 0.7,
-      max_tokens: options?.maxTokens ?? 600,
-    })
-  });
+  const groqModels = ['openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'groq/compound'];
+  let lastError: any = null;
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Groq API error: ${response.statusText} - ${errorText}`);
+  for (const model of groqModels) {
+    try {
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${groqKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userMessage }
+          ],
+          response_format: { type: 'json_object' },
+          temperature: options?.temperature ?? 0.3,
+          max_tokens: options?.maxTokens ?? 1500,
+        })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Groq ${model} error: ${response.statusText} - ${errorText}`);
+      }
+
+      const data = await response.json();
+      if (!data.choices || !data.choices[0]?.message?.content) {
+        throw new Error(`Groq ${model} returned empty choices`);
+      }
+      return data.choices[0].message.content;
+    } catch (err) {
+      lastError = err;
+      console.warn(`Groq model ${model} failed, trying next...`, err);
+    }
   }
 
-  const data = await response.json();
-  if (!data.choices || !data.choices[0]) {
-    throw new Error('Groq returned empty choices');
-  }
-  return data.choices[0].message.content;
+  throw lastError || new Error('All Groq models failed');
 }
 
 // ════════════════════════════════════════════════════════════
@@ -55,18 +67,30 @@ async function callGemini(instruction: string, content: string, options?: { mode
   }
 
   const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({
-    model: options?.model ?? 'gemini-flash-latest',
-    systemInstruction: instruction,
-    generationConfig: {
-      responseMimeType: 'application/json',
-      temperature: options?.temperature ?? 0.7,
-      maxOutputTokens: options?.maxTokens ?? 600,
-    }
-  });
+  const models = options?.model ? [options.model, 'gemini-3.6-flash', 'gemini-flash-latest'] : ['gemini-3.6-flash', 'gemini-flash-latest'];
+  let lastError: any = null;
 
-  const result = await model.generateContent(content);
-  return result.response.text();
+  for (const modelName of models) {
+    try {
+      const model = genAI.getGenerativeModel({
+        model: modelName,
+        systemInstruction: instruction,
+        generationConfig: {
+          responseMimeType: 'application/json',
+          temperature: options?.temperature ?? 0.3,
+          maxOutputTokens: options?.maxTokens ?? 1500,
+        }
+      });
+
+      const result = await model.generateContent(content);
+      return result.response.text();
+    } catch (err) {
+      lastError = err;
+      console.warn(`Gemini model ${modelName} failed:`, err);
+    }
+  }
+
+  throw lastError || new Error('All Gemini models failed');
 }
 
 export async function POST(req: NextRequest) {
@@ -84,14 +108,13 @@ export async function POST(req: NextRequest) {
   const { task, content, instruction } = body;
 
   // ── Resume Parsing ─────────────────────────────────────────
-  // LOW frequency (1x per upload) → Gemini first for quality
   if (task === 'parse_resume') {
     const prompt = `${instruction}\n\nRESUME TEXT:\n${content}`;
     try {
       const text = await callGemini(
         'You are a resume parser. Return valid JSON only.',
         prompt,
-        { model: 'gemini-flash-latest', temperature: 0.2, maxTokens: 2000 }
+        { model: 'gemini-3.6-flash', temperature: 0.2, maxTokens: 2000 }
       );
       return NextResponse.json({ text });
     } catch (error) {
@@ -107,17 +130,14 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Interview Turn ─────────────────────────────────────────
-  // HIGH frequency (10-15x per session) → Groq FIRST to save Gemini quota
   if (task === 'interview_turn') {
-    // Try Groq first (fast, generous free tier)
     try {
-      const text = await callGroq(instruction, content, { temperature: 0.7, maxTokens: 600 });
+      const text = await callGroq(instruction, content, { temperature: 0.6, maxTokens: 800 });
       return NextResponse.json({ text });
     } catch (error) {
       console.warn('Groq failed for interview_turn, falling back to Gemini...', error);
-      // Fallback to Gemini
       try {
-        const text = await callGemini(instruction, content, { temperature: 0.7, maxTokens: 600 });
+        const text = await callGemini(instruction, content, { temperature: 0.6, maxTokens: 800 });
         return NextResponse.json({ text });
       } catch (fallbackError) {
         console.error('Gemini fallback also failed:', fallbackError);
@@ -127,7 +147,6 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Final Impression ───────────────────────────────────────
-  // LOW frequency (1x per session) → Gemini first for quality
   if (task === 'generate_impression') {
     try {
       const text = await callGemini(

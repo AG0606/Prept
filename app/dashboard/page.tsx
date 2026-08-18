@@ -82,10 +82,35 @@ export default function DashboardPage() {
         const resResumes = await fetch('/api/resume');
         if (resResumes.ok) {
           const data = await resResumes.json();
-          if (data && data.resumes) {
-            setResumes(data.resumes);
-            const current = data.resumes.find((r: any) => r.isCurrent) || data.resumes[0];
-            if (current) setResumeData(current);
+          let serverResumes = data?.resumes || [];
+
+          // If user has a local resume that wasn't synced yet, upload it to the Google account
+          if (serverResumes.length === 0 && typeof window !== 'undefined') {
+            try {
+              const localRaw = localStorage.getItem('prept_active_resume');
+              if (localRaw) {
+                const localData = JSON.parse(localRaw);
+                if (localData && (localData.skills?.length > 0 || localData.rawText)) {
+                  const syncRes = await fetch('/api/resume', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(localData),
+                  });
+                  if (syncRes.ok) {
+                    const saved = await syncRes.json();
+                    serverResumes = [saved];
+                  }
+                }
+              }
+            } catch (syncErr) {
+              console.warn('Local resume sync error:', syncErr);
+            }
+          }
+
+          setResumes(serverResumes);
+          const current = serverResumes.find((r: any) => r.isCurrent) || serverResumes[0];
+          if (current) {
+            setResumeData(current);
           }
         }
         

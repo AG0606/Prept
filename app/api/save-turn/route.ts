@@ -31,12 +31,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    const interviewSession = await prisma.interviewSession.findFirst({
+    let interviewSession = await prisma.interviewSession.findFirst({
       where: { id: sessionId, userId: user.id }
     });
 
     if (!interviewSession) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      const currentResume = await prisma.resume.findFirst({
+        where: { userId: user.id, isCurrent: true }
+      });
+      interviewSession = await prisma.interviewSession.create({
+        data: {
+          id: sessionId,
+          jobProfile: 'Interview Session',
+          mode: 'practice',
+          userId: user.id,
+          resumeId: currentResume?.id || null,
+        }
+      });
     }
 
     const savedTurn = await prisma.turn.create({

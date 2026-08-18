@@ -39,8 +39,20 @@ export async function POST(req: NextRequest) {
       where: { userId: user.id, isCurrent: true }
     });
 
-    const interviewSession = await prisma.interviewSession.create({
-      data: {
+    const interviewSession = await prisma.interviewSession.upsert({
+      where: { id: sessionId },
+      update: {
+        jobProfile,
+        mode: mode || 'practice',
+        techSplit: techSplit || 50,
+        hrSplit: hrSplit || 25,
+        codeSplit: codeSplit || 25,
+        jobDescription: jobDescription || null,
+        interviewerPersona: interviewerPersona || 'standard',
+        gapAnalysis: gapAnalysis ? (typeof gapAnalysis === 'string' ? gapAnalysis : JSON.stringify(gapAnalysis)) : null,
+        resumeId: currentResume?.id || null,
+      },
+      create: {
         id: sessionId,
         jobProfile,
         mode: mode || 'practice',

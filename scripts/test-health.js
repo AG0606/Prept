@@ -11,7 +11,7 @@ async function testEverything() {
   console.log('================ API HEALTH CHECK ================');
   
   // 1. Gemini Models Test
-  const geminiModels = ['gemini-flash-latest', 'gemini-3.5-flash', 'gemini-3.7-flash'];
+  const geminiModels = ['gemini-3.6-flash', 'gemini-flash-latest'];
   for (const m of geminiModels) {
     try {
       const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
@@ -33,14 +33,14 @@ async function testEverything() {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
+        model: 'openai/gpt-oss-120b',
         messages: [{ role: 'user', content: 'Say hello in 1 word' }],
         max_tokens: 10
       })
     });
     const data = await res.json();
     if (res.ok && data.choices?.[0]) {
-      console.log('✅ 2. Groq LLM API (Llama 3.3 70B): LIVE ->', data.choices[0].message.content.trim());
+      console.log('✅ 2. Groq LLM API (GPT-OSS 120B): LIVE ->', data.choices[0].message.content.trim());
     } else {
       console.log('❌ 2. Groq LLM API: FAILED ->', JSON.stringify(data));
     }

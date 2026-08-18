@@ -112,15 +112,51 @@ const initialState = {
   transcriptWordCount: 0,
 };
 
+const getPersistedResume = () => {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem('prept_active_resume');
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+};
+
+const getPersistedJobProfile = () => {
+  if (typeof window === 'undefined') return '';
+  try {
+    return localStorage.getItem('prept_job_profile') || '';
+  } catch {
+    return '';
+  }
+};
+
 export const useInterviewStore = create<InterviewState>((set) => ({
   ...initialState,
+  resumeData: getPersistedResume(),
+  jobProfile: getPersistedJobProfile(),
 
-  setJobProfile: (jp) => set({ jobProfile: jp }),
+  setJobProfile: (jp) => {
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('prept_job_profile', jp);
+      } catch {}
+    }
+    set({ jobProfile: jp });
+  },
   setJobDescription: (jd) => set({ jobDescription: jd }),
   setInterviewerPersona: (persona) => set({ interviewerPersona: persona }),
   setGapAnalysis: (ga) => set({ gapAnalysis: ga }),
   setVadEnabled: (enabled) => set({ vadEnabled: enabled }),
-  setResumeData: (r) => set({ resumeData: r }),
+  setResumeData: (r) => {
+    if (typeof window !== 'undefined') {
+      try {
+        if (r) localStorage.setItem('prept_active_resume', JSON.stringify(r));
+        else localStorage.removeItem('prept_active_resume');
+      } catch {}
+    }
+    set({ resumeData: r });
+  },
   setMode: (mode) => set({ mode }),
   setSplits: (techSplit, hrSplit, codeSplit) => set({ techSplit, hrSplit, codeSplit }),
   startSession: () => {

@@ -13,30 +13,42 @@ async function callGroq(
   const groqKey = process.env.GROQ_API_KEY;
   if (!groqKey) throw new Error('GROQ_API_KEY not configured');
 
-  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${groqKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'llama-3.3-70b-versatile',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userMessage },
-      ],
-      response_format: { type: 'json_object' },
-      temperature: options?.temperature ?? 0.3,
-      max_tokens: options?.maxTokens ?? 1000,
-    }),
-  });
+  const models = ['openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'groq/compound'];
+  let lastErr: any = null;
 
-  if (!response.ok) {
-    throw new Error(`Groq API error: ${response.status} ${response.statusText}`);
+  for (const model of models) {
+    try {
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${groqKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userMessage },
+          ],
+          response_format: { type: 'json_object' },
+          temperature: options?.temperature ?? 0.3,
+          max_tokens: options?.maxTokens ?? 1000,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Groq API error (${model}): ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      return data.choices?.[0]?.message?.content || '{}';
+    } catch (e) {
+      lastErr = e;
+      console.warn(`Groq model ${model} failed in jd-analyze:`, e);
+    }
   }
 
-  const data = await response.json();
-  return data.choices?.[0]?.message?.content || '{}';
+  throw lastErr || new Error('All Groq models failed in jd-analyze');
 }
 
 async function callGemini(
@@ -48,17 +60,29 @@ async function callGemini(
   if (!geminiKey) throw new Error('GEMINI_API_KEY not configured');
 
   const genAI = new GoogleGenerativeAI(geminiKey);
-  const model = genAI.getGenerativeModel({
-    model: 'gemini-flash-latest',
-    systemInstruction: systemPrompt,
-    generationConfig: {
-      responseMimeType: 'application/json',
-      temperature: options?.temperature ?? 0.3,
-    },
-  });
+  const models = ['gemini-3.6-flash', 'gemini-flash-latest'];
+  let lastErr: any = null;
 
-  const result = await model.generateContent(userMessage);
-  return result.response.text();
+  for (const modelName of models) {
+    try {
+      const model = genAI.getGenerativeModel({
+        model: modelName,
+        systemInstruction: systemPrompt,
+        generationConfig: {
+          responseMimeType: 'application/json',
+          temperature: options?.temperature ?? 0.3,
+        },
+      });
+
+      const result = await model.generateContent(userMessage);
+      return result.response.text();
+    } catch (e) {
+      lastErr = e;
+      console.warn(`Gemini model ${modelName} failed in jd-analyze:`, e);
+    }
+  }
+
+  throw lastErr || new Error('All Gemini models failed in jd-analyze');
 }
 
 export async function POST(req: NextRequest) {

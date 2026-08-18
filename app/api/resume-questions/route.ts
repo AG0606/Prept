@@ -10,34 +10,46 @@ async function callGroq(systemPrompt: string, userMessage: string, options?: { t
     throw new Error('GROQ_API_KEY not configured');
   }
 
-  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${groqKey}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      model: 'llama-3.3-70b-versatile',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userMessage }
-      ],
-      response_format: { type: 'json_object' },
-      temperature: options?.temperature ?? 0.7,
-      max_tokens: options?.maxTokens ?? 1500,
-    })
-  });
+  const models = ['openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'groq/compound'];
+  let lastErr: any = null;
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Groq API error: ${response.statusText} - ${errorText}`);
+  for (const model of models) {
+    try {
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${groqKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userMessage }
+          ],
+          response_format: { type: 'json_object' },
+          temperature: options?.temperature ?? 0.7,
+          max_tokens: options?.maxTokens ?? 1500,
+        })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Groq API error (${model}): ${response.statusText} - ${errorText}`);
+      }
+
+      const data = await response.json();
+      if (!data.choices || !data.choices[0]?.message?.content) {
+        throw new Error(`Groq (${model}) returned empty choices`);
+      }
+      return data.choices[0].message.content;
+    } catch (e) {
+      lastErr = e;
+      console.warn(`Groq model ${model} failed in resume-questions:`, e);
+    }
   }
 
-  const data = await response.json();
-  if (!data.choices || !data.choices[0]) {
-    throw new Error('Groq returned empty choices');
-  }
-  return data.choices[0].message.content;
+  throw lastErr || new Error('All Groq models failed in resume-questions');
 }
 
 async function callGemini(instruction: string, content: string, options?: { model?: string; temperature?: number; maxTokens?: number }): Promise<string> {
@@ -47,18 +59,30 @@ async function callGemini(instruction: string, content: string, options?: { mode
   }
 
   const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({
-    model: options?.model ?? 'gemini-flash-latest',
-    systemInstruction: instruction,
-    generationConfig: {
-      responseMimeType: 'application/json',
-      temperature: options?.temperature ?? 0.7,
-      maxOutputTokens: options?.maxTokens ?? 1500,
-    }
-  });
+  const models = options?.model ? [options.model, 'gemini-3.6-flash', 'gemini-flash-latest'] : ['gemini-3.6-flash', 'gemini-flash-latest'];
+  let lastErr: any = null;
 
-  const result = await model.generateContent(content);
-  return result.response.text();
+  for (const modelName of models) {
+    try {
+      const model = genAI.getGenerativeModel({
+        model: modelName,
+        systemInstruction: instruction,
+        generationConfig: {
+          responseMimeType: 'application/json',
+          temperature: options?.temperature ?? 0.7,
+          maxOutputTokens: options?.maxTokens ?? 1500,
+        }
+      });
+
+      const result = await model.generateContent(content);
+      return result.response.text();
+    } catch (e) {
+      lastErr = e;
+      console.warn(`Gemini model ${modelName} failed in resume-questions:`, e);
+    }
+  }
+
+  throw lastErr || new Error('All Gemini models failed in resume-questions');
 }
 
 export async function GET(req: NextRequest) {
