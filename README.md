@@ -1,4 +1,4 @@
-# Prept // AI Interview Preparation Platform
+# Prept AI Interview Preparation Platform
 
 Prept is an intelligent, low-latency, and cost-optimized AI interview simulation platform. It bridges the gap between passive algorithmic practice and high-stakes technical communication through dynamic resume deep-dives, real-time vocal and emotional telemetry, structured behavioral and technical tracks, and comprehensive post-session evaluation reports.
 
