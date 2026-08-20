@@ -12,7 +12,7 @@ import { TranscriptDisplay } from '@/components/TranscriptDisplay';
 import { ScorePanel } from '@/components/ScorePanel';
 import { PreptWordmark } from '@/components/PreptLogo';
 import type { TurnSummary, LiveSignals } from '@/types';
-import { Check, Loader2, MessageSquare } from 'lucide-react';
+import { Check, Loader2, MessageSquare, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useEnhancedTTS } from '@/hooks/useEnhancedTTS';
 import { useAudioRecorder } from '@/hooks/useAudioRecorder';
@@ -632,7 +632,7 @@ export default function InterviewPage() {
           {ttsWarning && (
             <div className="bg-warn/10 border-b border-warn/30 px-6 py-2 text-xs font-mono text-warn flex items-center justify-between shrink-0">
               <span className="flex items-center gap-2">
-                <span>⚠️</span> {ttsWarning}
+                <AlertTriangle size={14} className="shrink-0" /> {ttsWarning}
               </span>
             </div>
           )}

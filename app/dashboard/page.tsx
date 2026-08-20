@@ -400,7 +400,7 @@ export default function DashboardPage() {
                             onClick={handleCreateDemoResume}
                             className="px-3 py-2 bg-surface border border-accent text-accent hover:bg-accent-muted text-xs font-mono font-bold whitespace-nowrap"
                           >
-                            ⚡ Use Sample Profile
+                            Use Sample Profile
                           </button>
                         </div>
                       </motion.div>
@@ -620,7 +620,7 @@ export default function DashboardPage() {
                 </div>
                 <div className="flex items-center gap-3">
                   <button onClick={handleCreateDemoResume} className="px-3 py-2 bg-surface border border-accent text-accent hover:bg-accent-muted text-xs font-mono font-bold">
-                    ⚡ Add Sample Profile
+                    Add Sample Profile
                   </button>
                   <button onClick={() => setIsUploading(!isUploading)} className="prept-btn-secondary">
                     <Plus size={16} /> Upload New PDF
@@ -686,7 +686,7 @@ export default function DashboardPage() {
 
                           {rating > 0 && (
                             <span className={`px-2.5 py-1 text-xs font-mono font-bold ${ratingBg} ${ratingColor} border border-current/20`}>
-                              ★ {rating}/10
+                              Score: {rating}/10
                             </span>
                           )}
                         </div>

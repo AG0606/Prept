@@ -46,7 +46,7 @@ export default function LandingPage() {
               className="text-xs font-mono font-bold px-3 py-1.5 border border-accent text-accent bg-accent-muted/20 hover:bg-accent-muted transition-colors"
               title="1-Click Guest Access for Vercel Preview Deployments"
             >
-              ⚡ Preview Demo Access
+              Preview Demo Access
             </button>
             <button
               onClick={() => signIn('google', { callbackUrl: '/dashboard' })}
@@ -155,7 +155,7 @@ export default function LandingPage() {
             onClick={() => signIn('credentials', { username: 'preview_candidate', callbackUrl: '/dashboard' })}
             className="prept-btn-primary px-10 py-4 text-base"
           >
-            ⚡ Launch Preview Session
+            Launch Preview Session
           </button>
           <button
             onClick={() => signIn('google', { callbackUrl: '/dashboard' })}
